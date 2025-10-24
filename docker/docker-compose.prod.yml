@@ -1,0 +1,73 @@
+# Production environment - maintains exact same behavior as your current setup
+version: '3.8'
+
+services:
+  option-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: option-api
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-api:/app
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             python app.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  option-scraper:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: option-scraper
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-api:/app
+    # Uses new structured version with environment file
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             while true; do python options_collector.py; sleep ${SCRAPE_INTERVAL:-3600}; done"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  sentiment-tracker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sentiment-tracker
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-api:/app
+    # Uses new structured version with environment file
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             while true; do python sentiment_analyzer.py; sleep 86400; done"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  daily-etl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: daily-etl
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-api:/app
+    # Run daily ETL at 18:00 (after market close)
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             while true; do 
+               python daily_pipeline.py; 
+               sleep 86400; 
+             done"
+    env_file:
+      - "../.env"
+    restart: unless-stopped

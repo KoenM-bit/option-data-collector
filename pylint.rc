@@ -1,0 +1,36 @@
+[MASTER]
+load-plugins = pylint.extensions.docparams
+
+[MESSAGES CONTROL]
+disable = 
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring  
+    C0116,  # missing-function-docstring
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    W0613,  # unused-argument
+    C0103,  # invalid-name (for single letter variables)
+    R0801,  # duplicate-code
+
+[FORMAT]
+max-line-length = 88
+
+[DESIGN]
+max-args = 7
+max-locals = 20
+max-returns = 6
+max-branches = 15
+max-statements = 50
+max-parents = 7
+max-attributes = 10
+min-public-methods = 1
+max-public-methods = 20
+
+[TYPECHECK]
+generated-members = requests.packages.urllib3.disable_warnings
+
+[SIMILARITIES]
+min-similarity-lines = 10
+ignore-comments = yes
+ignore-docstrings = yes
+ignore-imports = no
