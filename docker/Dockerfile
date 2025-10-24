@@ -7,13 +7,18 @@ ARG DNS_SERVER=8.8.8.8
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies and DNS utilities for Synology compatibility
-RUN apt-get update && apt-get install -y \
-    dnsutils \
-    iputils-ping \
+# Configure APT to use specific DNS and be more resilient on Synology
+RUN echo "Acquire::http::Timeout \"30\";" >> /etc/apt/apt.conf.d/99timeout && \
+    echo "Acquire::ftp::Timeout \"30\";" >> /etc/apt/apt.conf.d/99timeout && \
+    echo "Acquire::Retries \"3\";" >> /etc/apt/apt.conf.d/99timeout
+
+# Install system dependencies with timeout and retry for Synology compatibility
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .

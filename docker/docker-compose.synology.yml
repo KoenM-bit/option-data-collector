@@ -1,0 +1,98 @@
+# Emergency production configuration for Synology (network optimized)
+version: '3.8'
+
+services:
+  option-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.minimal
+      args:
+        DNS_SERVER: 8.8.8.8
+    container_name: option-api
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             python app.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000')" ]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  option-scraper:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.minimal
+      args:
+        DNS_SERVER: 8.8.8.8
+    container_name: option-scraper
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             while true; do python options_collector.py; sleep \${SCRAPE_INTERVAL:-3600}; done"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+    depends_on:
+      - option-api
+
+  sentiment-tracker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.minimal
+      args:
+        DNS_SERVER: 8.8.8.8
+    container_name: sentiment-tracker
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             python sentiment_analyzer.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+    depends_on:
+      - option-api
+
+  daily-etl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.minimal
+      args:
+        DNS_SERVER: 8.8.8.8
+    container_name: daily-etl
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             python daily_pipeline.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+    depends_on:
+      - option-api

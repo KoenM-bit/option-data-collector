@@ -1,15 +1,24 @@
 #!/bin/bash
 
-# Quick deployment script for Synology
+# Quick deployment script for Synology with fallback options
 # This script should be run from the project root directory on your Synology
 
 set -e  # Exit on any error
 
 echo "🚀 Starting Synology deployment..."
 
+# Check for network issues and offer minimal build option
+if [ "$1" = "--minimal" ]; then
+    echo "🔧 Using minimal build (no system packages) for network compatibility"
+    COMPOSE_FILE="docker/docker-compose.synology.yml"
+else
+    echo "📦 Using standard build (use --minimal if network issues occur)"
+    COMPOSE_FILE="docker/docker-compose.prod.yml"
+fi
+
 # Check if we're in the right directory
-if [ ! -f "docker/docker-compose.prod.yml" ]; then
-    echo "❌ Error: docker/docker-compose.prod.yml not found"
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "❌ Error: $COMPOSE_FILE not found"
     echo "Please run this script from the project root directory"
     exit 1
 fi
@@ -21,7 +30,7 @@ git pull origin main
 
 # Stop existing containers
 echo "🛑 Stopping existing containers..."
-sudo docker-compose -f docker/docker-compose.prod.yml down || true
+sudo docker-compose -f $COMPOSE_FILE down || true
 
 # Clean up old images (optional)
 echo "🧹 Cleaning up old Docker images..."
@@ -29,8 +38,9 @@ sudo docker system prune -f
 
 # Build and start containers
 echo "🔨 Building and starting containers..."
-sudo docker-compose -f docker/docker-compose.prod.yml build --no-cache
-sudo docker-compose -f docker/docker-compose.prod.yml up -d
+echo "📝 Using compose file: $COMPOSE_FILE"
+sudo docker-compose -f $COMPOSE_FILE build --no-cache
+sudo docker-compose -f $COMPOSE_FILE up -d
 
 # Wait for services to start
 echo "⏳ Waiting for services to initialize..."
@@ -38,21 +48,21 @@ sleep 20
 
 # Check container status
 echo "📊 Container status:"
-sudo docker-compose -f docker/docker-compose.prod.yml ps
+sudo docker-compose -f $COMPOSE_FILE ps
 
 echo ""
 echo "🎉 Deployment complete!"
 echo ""
 echo "📋 Useful commands:"
-echo "  View logs: sudo docker-compose -f docker/docker-compose.prod.yml logs -f"
-echo "  Check status: sudo docker-compose -f docker/docker-compose.prod.yml ps"
-echo "  Stop services: sudo docker-compose -f docker/docker-compose.prod.yml down"
-echo "  Restart service: sudo docker-compose -f docker/docker-compose.prod.yml restart [service-name]"
+echo "  View logs: sudo docker-compose -f $COMPOSE_FILE logs -f"
+echo "  Check status: sudo docker-compose -f $COMPOSE_FILE ps"
+echo "  Stop services: sudo docker-compose -f $COMPOSE_FILE down"
+echo "  Restart service: sudo docker-compose -f $COMPOSE_FILE restart [service-name]"
 echo ""
 
 # Test basic connectivity
 echo "🔍 Testing basic connectivity..."
-if sudo docker-compose -f docker/docker-compose.prod.yml exec -T option-api python -c "import requests; print('✅ Python imports working')" 2>/dev/null; then
+if sudo docker-compose -f $COMPOSE_FILE exec -T option-api python -c "import requests; print('✅ Python imports working')" 2>/dev/null; then
     echo "✅ Services appear to be working"
 else
     echo "⚠️  Services may still be starting up - check logs if issues persist"
