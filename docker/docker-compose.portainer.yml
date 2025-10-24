@@ -1,0 +1,106 @@
+# Portainer-optimized compose file (simplified paths and explicit env vars)
+version: '3.8'
+
+services:
+  option-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dns-fix
+    container_name: option-api-portainer
+    network_mode: host
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    working_dir: /app
+    dns:
+      - 8.8.8.8  
+      - 8.8.4.4
+    extra_hosts:
+      - "pypi.org:151.101.1.63"
+      - "pypi.python.org:151.101.1.63"
+      - "files.pythonhosted.org:151.101.1.63"
+    command: python app.py
+    restart: unless-stopped
+    environment:
+      DB_HOST: "${DB_HOST:-192.168.1.200}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME:-options_db}"
+      ENVIRONMENT: "production"
+
+  option-scraper:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dns-fix  
+    container_name: option-scraper-portainer
+    network_mode: host
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    working_dir: /app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "pypi.org:151.101.1.63"
+      - "pypi.python.org:151.101.1.63"
+      - "files.pythonhosted.org:151.101.1.63"
+    command: >
+      sh -c "while true; do python options_collector.py; sleep $${SCRAPE_INTERVAL:-3600}; done"
+    restart: unless-stopped
+    environment:
+      DB_HOST: "${DB_HOST:-192.168.1.200}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME:-options_db}"
+      SCRAPE_INTERVAL: "${SCRAPE_INTERVAL:-3600}"
+
+  sentiment-tracker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dns-fix
+    container_name: sentiment-tracker-portainer  
+    network_mode: host
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    working_dir: /app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "pypi.org:151.101.1.63"
+      - "pypi.python.org:151.101.1.63"
+      - "files.pythonhosted.org:151.101.1.63"
+    command: python sentiment_analyzer.py
+    restart: unless-stopped
+    environment:
+      DB_HOST: "${DB_HOST:-192.168.1.200}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME:-options_db}"
+
+  daily-etl:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dns-fix
+    container_name: daily-etl-portainer
+    network_mode: host
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    working_dir: /app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4  
+    extra_hosts:
+      - "pypi.org:151.101.1.63"
+      - "pypi.python.org:151.101.1.63"
+      - "files.pythonhosted.org:151.101.1.63"
+    command: python daily_pipeline.py
+    restart: unless-stopped
+    environment:
+      DB_HOST: "${DB_HOST:-192.168.1.200}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME:-options_db}"

@@ -3,13 +3,17 @@
 # Emergency deployment with DNS fixes for Synology Docker issues  
 echo "🚨 Emergency deployment with DNS fixes for Synology"
 
-# Check for DNS fix option
+# Check for deployment option
 if [ "$1" = "--dns-fix" ]; then
     echo "🌐 Using DNS-fix approach (hardcoded PyPI IPs)"
     COMPOSE_FILE="docker/docker-compose.dns-fix.yml"
 elif [ "$1" = "--offline" ]; then
-    echo "� Using offline approach (no network during build)"
+    echo "📦 Using offline approach (no network during build)"
     COMPOSE_FILE="docker/docker-compose.offline.yml"
+elif [ "$1" = "--portainer" ]; then
+    echo "🐳 Using Portainer-optimized configuration"
+    COMPOSE_FILE="docker/docker-compose.portainer.yml"
+    echo "💡 After this build, you can manage via Portainer Web UI"
 else
     echo "🔧 Using minimal approach (no system packages)"
     COMPOSE_FILE="docker/docker-compose.synology.yml"
@@ -45,5 +49,8 @@ echo "✅ Deployment complete!"
 echo "🔍 Check logs with: sudo docker-compose -f $COMPOSE_FILE logs -f"
 echo ""
 echo "💡 If this approach failed, try:"
-echo "  ./emergency-deploy.sh --dns-fix   (hardcoded PyPI IPs)"
-echo "  ./emergency-deploy.sh --offline   (no network during build)"
+echo "  ./emergency-deploy.sh --dns-fix     (hardcoded PyPI IPs)"
+echo "  ./emergency-deploy.sh --portainer   (Portainer-optimized)"
+echo "  ./emergency-deploy.sh --offline     (no network during build)"
+echo ""
+echo "🐳 For Portainer users: After successful build, manage containers via Portainer UI"
