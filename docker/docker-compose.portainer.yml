@@ -4,7 +4,7 @@ version: '3.8'
 services:
   option-api:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dns-fix
     container_name: option-api-portainer
     network_mode: host
@@ -30,7 +30,7 @@ services:
 
   option-scraper:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dns-fix  
     container_name: option-scraper-portainer
     network_mode: host
@@ -57,7 +57,7 @@ services:
 
   sentiment-tracker:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dns-fix
     container_name: sentiment-tracker-portainer  
     network_mode: host
@@ -82,7 +82,7 @@ services:
 
   daily-etl:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dns-fix
     container_name: daily-etl-portainer
     network_mode: host
