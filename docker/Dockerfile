@@ -1,18 +1,18 @@
 # Professional Docker configuration for option-data-collector
 FROM python:3.12-slim
 
-# DNS configuration for Synology compatibility
+# DNS configuration argument (used in docker-compose)
 ARG DNS_SERVER=8.8.8.8
-RUN echo "nameserver $DNS_SERVER" > /etc/resolv.conf
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies and configure DNS
+# Install system dependencies and DNS utilities for Synology compatibility
 RUN apt-get update && apt-get install -y \
     dnsutils \
     iputils-ping \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
