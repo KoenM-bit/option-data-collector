@@ -80,7 +80,7 @@ jobs:
           # Stop existing containers
           echo "⏸️  Stopping containers..."
           if [ -f "$COMPOSE_FILE" ]; then
-            docker compose -f $COMPOSE_FILE down --timeout 30 || true
+            docker-compose -f $COMPOSE_FILE down --timeout 30 || true
           fi
           
           # Update to latest code
@@ -95,28 +95,28 @@ jobs:
           
           # Build and start with DNS configuration
           echo "🏗️  Building and starting services..."
-          docker compose -f $COMPOSE_FILE build --no-cache --pull --build-arg DNS_SERVER=8.8.8.8
-          docker compose -f $COMPOSE_FILE up -d
+          docker-compose -f $COMPOSE_FILE build --no-cache --pull --build-arg DNS_SERVER=8.8.8.8
+          docker-compose -f $COMPOSE_FILE up -d
           
           # Health check
           echo "⏳ Waiting for services..."
           sleep 45
           
-          RUNNING=$(docker compose -f $COMPOSE_FILE ps --format json | jq -r '.State' | grep -c "running" || echo "0")
+          RUNNING=$(docker-compose -f $COMPOSE_FILE ps -q | wc -l || echo "0")
           
           if [ "$RUNNING" -gt 0 ]; then
             echo "✅ Deployment successful!"
-            docker compose -f $COMPOSE_FILE ps
+            docker-compose -f $COMPOSE_FILE ps
             docker image prune -f
           else
             echo "❌ Deployment failed!"
-            docker compose -f $COMPOSE_FILE logs --tail=50
+            docker-compose -f $COMPOSE_FILE logs --tail=50
             
             # Rollback
             if [ -d "backup" ]; then
               echo "🔄 Rolling back..."
               cp -r backup/* . 2>/dev/null || true
-              docker compose -f $COMPOSE_FILE up -d
+              docker-compose -f $COMPOSE_FILE up -d
             fi
             exit 1
           fi

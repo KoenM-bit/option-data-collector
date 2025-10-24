@@ -141,11 +141,11 @@ cp .env.example .env
 nano .env
 
 # Test Docker build
-docker-compose -f docker/docker-compose.prod.yml build
-docker-compose -f docker/docker-compose.prod.yml up -d
+sudo docker-compose -f docker/docker-compose.prod.yml build
+sudo docker-compose -f docker/docker-compose.prod.yml up -d
 
 # Check status
-docker-compose -f docker/docker-compose.prod.yml ps
+sudo docker-compose -f docker/docker-compose.prod.yml ps
 ```
 
 ### Trigger Automatic Deployment
@@ -168,10 +168,10 @@ ssh your-username@192.168.1.200
 cd /volume1/docker/option-data-collector
 
 # Check container status
-docker compose -f docker/docker-compose.prod.yml ps
+sudo docker-compose -f docker/docker-compose.prod.yml ps
 
 # View logs
-docker compose -f docker/docker-compose.prod.yml logs -f
+sudo docker-compose -f docker/docker-compose.prod.yml logs -f
 
 # Check recent deployments
 ls -la backup*/  # View backups from deployments
@@ -202,11 +202,11 @@ If deployment fails, the system automatically rolls back to the previous version
 ```bash
 # Manual rollback (if needed)
 cd /volume1/docker/option-data-collector
-docker compose -f docker/docker-compose.prod.yml down
+sudo docker-compose -f docker/docker-compose.prod.yml down
 
 # Restore from backup
 cp -r backup/* .
-docker compose -f docker/docker-compose.prod.yml up -d
+sudo docker-compose -f docker/docker-compose.prod.yml up -d
 ```
 
 ## 🎯 9. Testing the Setup
@@ -266,7 +266,7 @@ ssh your-user@synology-ip "sudo chown -R 1001:1001 /volume1/docker/option-data-c
 ### Services Not Starting
 ```bash
 # Check detailed logs
-ssh your-user@synology-ip "cd /volume1/docker/option-data-collector && docker compose -f docker/docker-compose.prod.yml logs"
+ssh your-user@synology-ip "cd /volume1/docker/option-data-collector && sudo docker-compose -f docker/docker-compose.prod.yml logs"
 ```
 
 ### DNS Configuration Checklist
@@ -282,7 +282,7 @@ If you still encounter issues:
 1. Check the **GitHub Actions logs** for detailed error messages
 2. SSH to your Synology and check **Docker logs**:
    ```bash
-   docker compose -f docker/docker-compose.prod.yml logs --tail=100
+   sudo docker-compose -f docker/docker-compose.prod.yml logs --tail=100
    ```
 3. Verify all **GitHub Secrets** are set correctly
 4. Ensure **SSH key permissions** are correct (600 for private key)
