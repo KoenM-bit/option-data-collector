@@ -2,56 +2,135 @@ name: Deploy to Synology
 
 on:
   workflow_run:
-    workflows: ["CI Pipeline"]
+    workflows: ["Code Quality & Testing"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:  # Manual trigger option
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: 🚀 Deploy to Synology
+    # Only run if CI workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Download artifact
-      uses: actions/download-artifact@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
-        name: docker-image
-        run-id: ${{ github.event.workflow_run.id }}
+        fetch-depth: 0  # Full history for proper deployment
     
-    - name: Deploy to Synology
-      uses: appleboy/ssh-action@v0.1.5
+    - name: Get commit info
+      id: commit
+      run: |
+        echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+        echo "COMMIT_MSG=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+        echo "COMMIT_AUTHOR=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+    
+    - name: 🔍 Pre-deployment checks
+      run: |
+        echo "🎯 Deploying commit: ${{ steps.commit.outputs.SHORT_SHA }}"
+        echo "👤 Author: ${{ steps.commit.outputs.COMMIT_AUTHOR }}"
+        echo "📝 Message: ${{ steps.commit.outputs.COMMIT_MSG }}"
+        echo "🏠 Target: ${{ secrets.SYNOLOGY_HOST }}"
+        
+    - name: 🚀 Deploy to Synology
+      uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.SYNOLOGY_HOST }}
         username: ${{ secrets.SYNOLOGY_USER }}
         key: ${{ secrets.SYNOLOGY_SSH_KEY }}
+        port: ${{ secrets.SYNOLOGY_SSH_PORT || 22 }}
+        timeout: 300s
         script: |
-          cd /volume1/docker/option-api
+          set -e
           
-          # Backup current version
-          docker-compose -f docker-compose.prod.yml down
-          docker tag option-collector:latest option-collector:backup || true
+          echo "🚀 Starting deployment to Synology..."
+          echo "📅 Deployment time: $(date)"
+          echo "🎯 Commit: ${{ steps.commit.outputs.SHORT_SHA }}"
           
-          # Load new image (you would need to transfer the image file first)
-          # For now, just rebuild from source
-          git pull origin main
+          # Configuration
+          PROJECT_DIR="/volume1/docker/option-data-collector"
+          COMPOSE_FILE="docker/docker-compose.prod.yml"
           
-          # Deploy with new structured code
-          docker-compose -f docker-compose.prod.yml build
-          docker-compose -f docker-compose.prod.yml up -d
+          # Create project directory if it doesn't exist
+          mkdir -p $PROJECT_DIR
+          cd $PROJECT_DIR
           
-          # Health check
-          sleep 30
-          if ! docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
-            echo "Deployment failed, rolling back..."
-            docker-compose -f docker-compose.prod.yml down
-            docker tag option-collector:backup option-collector:latest
-            docker-compose -f docker-compose.prod.yml up -d
-            exit 1
+          # Initialize git repository if needed
+          if [ ! -d ".git" ]; then
+            echo "🔧 Initializing git repository..."
+            git init
+            git remote add origin https://github.com/KoenM-bit/option-data-collector.git
+            git fetch origin
+            git checkout -b main origin/main
+          else
+            echo "📥 Pulling latest changes..."
+            git fetch origin main
           fi
           
-          # Cleanup
-          docker image prune -f
+          # Backup current version
+          echo "💾 Creating backup..."
+          if [ -d "backup" ]; then rm -rf backup.old; mv backup backup.old; fi
+          mkdir -p backup
+          cp -r src backup/ 2>/dev/null || true
+          cp *.py backup/ 2>/dev/null || true
+          cp .env backup/ 2>/dev/null || true
           
-          echo "✅ Deployment successful!"
+          # Stop existing containers
+          echo "⏸️  Stopping containers..."
+          if [ -f "$COMPOSE_FILE" ]; then
+            docker compose -f $COMPOSE_FILE down --timeout 30 || true
+          fi
+          
+          # Update to latest code
+          echo "📥 Updating code..."
+          git reset --hard origin/main
+          
+          # Ensure .env exists
+          if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+            cp .env.example .env
+            echo "⚠️  Configure .env for production!"
+          fi
+          
+          # Build and start with DNS configuration
+          echo "🏗️  Building and starting services..."
+          docker compose -f $COMPOSE_FILE build --no-cache --pull --build-arg DNS_SERVER=8.8.8.8
+          docker compose -f $COMPOSE_FILE up -d
+          
+          # Health check
+          echo "⏳ Waiting for services..."
+          sleep 45
+          
+          RUNNING=$(docker compose -f $COMPOSE_FILE ps --format json | jq -r '.State' | grep -c "running" || echo "0")
+          
+          if [ "$RUNNING" -gt 0 ]; then
+            echo "✅ Deployment successful!"
+            docker compose -f $COMPOSE_FILE ps
+            docker image prune -f
+          else
+            echo "❌ Deployment failed!"
+            docker compose -f $COMPOSE_FILE logs --tail=50
+            
+            # Rollback
+            if [ -d "backup" ]; then
+              echo "🔄 Rolling back..."
+              cp -r backup/* . 2>/dev/null || true
+              docker compose -f $COMPOSE_FILE up -d
+            fi
+            exit 1
+          fi
+
+    - name: 🎉 Deployment Success
+      if: success()
+      run: |
+        echo "🎊 Deployment completed successfully!"
+        echo "✅ Options Data Collector is now running on your Synology NAS"
+        echo "🔗 Access at: http://${{ secrets.SYNOLOGY_HOST }}"
+        
+    - name: ❌ Deployment Failure  
+      if: failure()
+      run: |
+        echo "💥 Deployment failed!"
+        echo "🔧 Please check the logs above and your Synology configuration"
+        echo "📞 SSH to debug: ssh ${{ secrets.SYNOLOGY_USER }}@${{ secrets.SYNOLOGY_HOST }}"
