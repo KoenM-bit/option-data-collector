@@ -7,12 +7,7 @@ WORKDIR /app
 # Copy requirements first
 COPY requirements.txt .
 
-# Configure DNS for build process (Synology fix)
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf.build && \
-    echo "nameserver 8.8.4.4" >> /etc/resolv.conf.build && \
-    cp /etc/resolv.conf.build /etc/resolv.conf
-
-# Configure pip with alternative hosts and retry logic
+# Configure pip with DNS-friendly settings for Synology
 ENV PIP_INDEX_URL=https://pypi.org/simple/
 ENV PIP_EXTRA_INDEX_URL=https://pypi.python.org/simple/
 ENV PIP_TRUSTED_HOST=pypi.org,pypi.python.org,files.pythonhosted.org
