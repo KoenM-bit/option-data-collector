@@ -6,7 +6,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dns-fix
-    container_name: option-api-portainer
+    container_name: option-api-new
     network_mode: host
     volumes:
       - /volume1/docker/option-data-collector:/app
@@ -31,8 +31,8 @@ services:
   option-scraper:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.dns-fix  
-    container_name: option-scraper-portainer
+      dockerfile: docker/Dockerfile.dns-fix
+    container_name: option-scraper-new
     network_mode: host
     volumes:
       - /volume1/docker/option-data-collector:/app
@@ -59,7 +59,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dns-fix
-    container_name: sentiment-tracker-portainer  
+    container_name: sentiment-tracker-new  
     network_mode: host
     volumes:
       - /volume1/docker/option-data-collector:/app
@@ -84,7 +84,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dns-fix
-    container_name: daily-etl-portainer
+    container_name: daily-etl-new
     network_mode: host
     volumes:
       - /volume1/docker/option-data-collector:/app
