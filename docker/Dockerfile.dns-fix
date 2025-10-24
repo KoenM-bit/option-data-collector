@@ -1,0 +1,37 @@
+# DNS-fixed Docker configuration for Synology
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first
+COPY requirements.txt .
+
+# Configure DNS for build process (Synology fix)
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf.build && \
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf.build && \
+    cp /etc/resolv.conf.build /etc/resolv.conf
+
+# Configure pip with alternative hosts and retry logic
+ENV PIP_INDEX_URL=https://pypi.org/simple/
+ENV PIP_EXTRA_INDEX_URL=https://pypi.python.org/simple/
+ENV PIP_TRUSTED_HOST=pypi.org,pypi.python.org,files.pythonhosted.org
+ENV PIP_TIMEOUT=60
+ENV PIP_RETRIES=3
+
+# Install with multiple fallback strategies
+RUN pip install --upgrade pip || \
+    python -m ensurepip --upgrade || \
+    echo "Using system pip" && \
+    \
+    pip install --no-cache-dir -r requirements.txt || \
+    pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt || \
+    python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+
+# Copy source code
+COPY . .
+
+# Set Python path
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+CMD ["python", "beursduivel.py"]

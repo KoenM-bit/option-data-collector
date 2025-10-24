@@ -1,0 +1,14 @@
+# Ultra-minimal Docker configuration (no network dependencies)
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy everything first
+COPY . .
+
+# Set Python path
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# Default command - dependencies will be installed at runtime from volume
+CMD ["python", "beursduivel.py"]

@@ -1,0 +1,83 @@
+# Offline deployment for extreme Synology network issues
+version: '3.8'
+
+services:
+  option-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.offline
+    container_name: option-api
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    command: >
+      sh -c "
+      echo '🔧 Installing dependencies locally...' &&
+      pip install --user --no-index --find-links /app/wheels -r requirements.txt 2>/dev/null || 
+      pip install --user -r requirements.txt ||
+      echo '⚠️ Using system Python packages' &&
+      python app.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  option-scraper:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.offline
+    container_name: option-scraper
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    command: >
+      sh -c "
+      echo '🔧 Installing dependencies locally...' &&
+      pip install --user --no-index --find-links /app/wheels -r requirements.txt 2>/dev/null ||
+      pip install --user -r requirements.txt ||
+      echo '⚠️ Using system Python packages' &&
+      while true; do python options_collector.py; sleep \${SCRAPE_INTERVAL:-3600}; done"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  sentiment-tracker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.offline
+    container_name: sentiment-tracker
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    command: >
+      sh -c "
+      echo '🔧 Installing dependencies locally...' &&
+      pip install --user --no-index --find-links /app/wheels -r requirements.txt 2>/dev/null ||
+      pip install --user -r requirements.txt ||
+      echo '⚠️ Using system Python packages' &&
+      python sentiment_analyzer.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
+
+  daily-etl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.offline
+    container_name: daily-etl
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
+    command: >
+      sh -c "
+      echo '🔧 Installing dependencies locally...' &&
+      pip install --user --no-index --find-links /app/wheels -r requirements.txt 2>/dev/null ||
+      pip install --user -r requirements.txt ||
+      echo '⚠️ Using system Python packages' &&
+      python daily_pipeline.py"
+    env_file:
+      - "../.env"
+    restart: unless-stopped
