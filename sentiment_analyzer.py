@@ -11,7 +11,7 @@ def main():
     """Main execution - same logic as original sentiment_tracker.py"""
     sentiment_service = SentimentService()
 
-    print(f"📊 AD.AS Sentiment Tracker v2.0")
+    print("📊 AD.AS Sentiment Tracker v2.0")
     print(f"🎯 Target: {sentiment_service.ticker}")
     print("-" * 40)
 

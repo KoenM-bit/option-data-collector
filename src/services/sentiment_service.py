@@ -209,6 +209,7 @@ class SentimentService:
             "target_high": target_high_price,
             "target_low": target_low_price,
             "sentiment_score": sentiment_score,
+            "sentiment_label": sentiment_label,
             "buy_count": buy_count,
             "hold_count": hold_count,
             "sell_count": sell_count,

@@ -102,8 +102,6 @@ if __name__ == "__main__":
     print("🚀 Running Option Service directly...")
     service = OptionService()
     try:
-        from src.utils.data_utils import is_market_open
-
         if is_market_open():
             count = service.collect_and_store_options()
             print(

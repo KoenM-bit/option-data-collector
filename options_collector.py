@@ -15,7 +15,7 @@ def main():
     """Main execution loop - same logic as original beursduivel.py"""
     option_service = OptionService()
 
-    print(f"🚀 Ahold Delhaize Options Scraper v2.0")
+    print("🚀 Ahold Delhaize Options Scraper v2.0")
     print(f"📍 Environment: {settings.environment}")
     print(f"🗄️  Database: {settings.db_host}:{settings.db_port}")
     print(
@@ -27,7 +27,7 @@ def main():
         if is_market_open():
             count = option_service.collect_and_store_options()
             print(
-                f"⏳ Waiting {settings.scrape_interval//60} minutes for next update...\n"
+                f"✅ Processed {count} options. Waiting {settings.scrape_interval//60} minutes for next update...\n"
             )
             time.sleep(settings.scrape_interval)
         else:

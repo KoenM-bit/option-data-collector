@@ -11,8 +11,8 @@ def main():
     """Main execution - same logic as original daily_etl.py"""
     etl_service = ETLService()
 
-    print(f"⚙️ Daily Options ETL v2.0")
-    print(f"📊 Processing FD data, Greeks, and Scores")
+    print("⚙️ Daily Options ETL v2.0")
+    print("📊 Processing FD data, Greeks, and Scores")
     print("-" * 50)
 
     etl_service.run_etl()
