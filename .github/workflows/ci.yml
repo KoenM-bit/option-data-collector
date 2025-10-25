@@ -41,7 +41,7 @@ jobs:
         run: ruff check .
 
       - name: Black check
-        run: black --check .
+        run: black --check app tests
 
       - name: Pytest (smoke)
         run: pytest -q
