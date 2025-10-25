@@ -8,12 +8,13 @@ from flasgger import Swagger
 app = Flask(__name__)
 
 # Swagger configuratie
-app.config['SWAGGER'] = {
-    'title': 'KoenMarijt API',
-    'uiversion': 3,
-    'description': 'Endpoints voor optieprijzen, sentimentdata en trendanalyse'
+app.config["SWAGGER"] = {
+    "title": "KoenMarijt API",
+    "uiversion": 3,
+    "description": "Endpoints voor optieprijzen, sentimentdata en trendanalyse",
 }
 swagger = Swagger(app)
+
 
 # ------------------------
 # DATABASE CONNECTIE
@@ -25,12 +26,14 @@ def get_connection():
         user="remoteuser",
         password="T3l3foon32#123",
         database="optionsdb",
-        port=3306
+        port=3306,
     )
+
 
 # ------------------------
 # OPTIE ENDPOINTS
 # ------------------------
+
 
 @app.route("/api/latest")
 def latest_price():
@@ -156,9 +159,12 @@ def latest_by_expiry_strike_and_type(expiry, strike, option_type):
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    return jsonify(row or {
-        "error": f"No {option_type} found for expiry like '{expiry}' and strike like '{strike}'"
-    })
+    return jsonify(
+        row
+        or {
+            "error": f"No {option_type} found for expiry like '{expiry}' and strike like '{strike}'"
+        }
+    )
 
 
 @app.route("/api/contracts", methods=["GET"])
@@ -172,19 +178,23 @@ def list_contracts():
     """
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT DISTINCT expiry, strike, type
         FROM option_prices
         ORDER BY expiry, strike
-    """)
+    """
+    )
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
     return jsonify(rows)
 
+
 # ------------------------
 # SENTIMENT ENDPOINTS
 # ------------------------
+
 
 @app.route("/api/sentiment/<string:ticker>", methods=["GET"])
 def get_latest_sentiment(ticker):
@@ -203,13 +213,16 @@ def get_latest_sentiment(ticker):
     """
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT *
         FROM sentiment_data
         WHERE ticker = %s
         ORDER BY timestamp DESC
         LIMIT 1
-    """, (ticker.upper(),))
+    """,
+        (ticker.upper(),),
+    )
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -230,7 +243,9 @@ def get_latest_sentiment(ticker):
     latest_entry = next((x for x in trend_data if x.get("period") == "0m"), None)
     buy_count = latest_entry.get("buy", 0) + latest_entry.get("strongBuy", 0) if latest_entry else 0
     hold_count = latest_entry.get("hold", 0) if latest_entry else 0
-    sell_count = latest_entry.get("sell", 0) + latest_entry.get("strongSell", 0) if latest_entry else 0
+    sell_count = (
+        latest_entry.get("sell", 0) + latest_entry.get("strongSell", 0) if latest_entry else 0
+    )
 
     result = {
         "ticker": row["ticker"],
@@ -245,7 +260,7 @@ def get_latest_sentiment(ticker):
         "sell_count": sell_count,
         "months_considered": len(trend_data),
         "trend_json": trend_data,
-        "timestamp": row.get("timestamp")
+        "timestamp": row.get("timestamp"),
     }
 
     return jsonify(result)
@@ -268,13 +283,16 @@ def get_sentiment_trend(ticker):
     """
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT trend_json, timestamp
         FROM sentiment_data
         WHERE ticker = %s
         ORDER BY timestamp DESC
         LIMIT 1
-    """, (ticker.upper(),))
+    """,
+        (ticker.upper(),),
+    )
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -295,7 +313,9 @@ def get_sentiment_trend(ticker):
     latest_entry = next((x for x in trend_data if x.get("period") == "0m"), None)
     buy_count = latest_entry.get("buy", 0) + latest_entry.get("strongBuy", 0) if latest_entry else 0
     hold_count = latest_entry.get("hold", 0) if latest_entry else 0
-    sell_count = latest_entry.get("sell", 0) + latest_entry.get("strongSell", 0) if latest_entry else 0
+    sell_count = (
+        latest_entry.get("sell", 0) + latest_entry.get("strongSell", 0) if latest_entry else 0
+    )
 
     result = {
         "ticker": ticker.upper(),
@@ -304,9 +324,9 @@ def get_sentiment_trend(ticker):
             "buy_count": buy_count,
             "hold_count": hold_count,
             "sell_count": sell_count,
-            "months_considered": len(trend_data)
+            "months_considered": len(trend_data),
         },
-        "timestamp": row.get("timestamp")
+        "timestamp": row.get("timestamp"),
     }
 
     return jsonify(result)
@@ -321,15 +341,14 @@ def status():
       200:
         description: Statusinformatie over de API
     """
-    return jsonify({
-        "status": "running",
-        "timestamp": dt.datetime.now().isoformat(),
-        "services": [
-            "option-api",
-            "option-scraper",
-            "sentiment-tracker"
-        ]
-    })
+    return jsonify(
+        {
+            "status": "running",
+            "timestamp": dt.datetime.now().isoformat(),
+            "services": ["option-api", "option-scraper", "sentiment-tracker"],
+        }
+    )
+
 
 # ------------------------
 # START DE APP

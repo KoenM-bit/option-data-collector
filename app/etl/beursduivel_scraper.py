@@ -58,17 +58,27 @@ def fetch_option_chain():
                     continue
                 full_url = clean_href(href)
                 bid_el, ask_el = (bid_call, ask_call) if opt_type == "Call" else (bid_put, ask_put)
-                bid_val = _parse_eu_number(bid_el.get_text(strip=True)) if bid_el and bid_el.get_text(strip=True) else None
-                ask_val = _parse_eu_number(ask_el.get_text(strip=True)) if ask_el and ask_el.get_text(strip=True) else None
-                options.append({
-                    "type": opt_type,
-                    "expiry": expiry_text,
-                    "strike": strike,
-                    "issue_id": issue_id,
-                    "url": full_url,
-                    "bid": bid_val,
-                    "ask": ask_val
-                })
+                bid_val = (
+                    _parse_eu_number(bid_el.get_text(strip=True))
+                    if bid_el and bid_el.get_text(strip=True)
+                    else None
+                )
+                ask_val = (
+                    _parse_eu_number(ask_el.get_text(strip=True))
+                    if ask_el and ask_el.get_text(strip=True)
+                    else None
+                )
+                options.append(
+                    {
+                        "type": opt_type,
+                        "expiry": expiry_text,
+                        "strike": strike,
+                        "issue_id": issue_id,
+                        "url": full_url,
+                        "bid": bid_val,
+                        "ask": ask_val,
+                    }
+                )
     return options
 
 
@@ -114,7 +124,9 @@ def save_price_to_db(option, price, source):
         """,
         (option["issue_id"], option["expiry"], option["type"], option["strike"], price, source),
     )
-    conn.commit(); cur.close(); conn.close()
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def run_once():

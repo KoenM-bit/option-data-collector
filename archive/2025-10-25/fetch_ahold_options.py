@@ -8,10 +8,12 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 # ------------------ Helpers ------------------
 
+
 def clean_href(href: str) -> str:
     """Zet relatieve href om naar absolute URL."""
     href = href.replace("../../../", "/")
     return f"{BASE}{href}"
+
 
 def _parse_eu_number(s: str) -> float:
     """Parse '1.234,56' -> 1234.56 en '1,900' -> 1.9"""
@@ -23,7 +25,9 @@ def _parse_eu_number(s: str) -> float:
     except ValueError:
         return None
 
+
 # ------------------ Fetchers ------------------
+
 
 def fetch_option_chain():
     print(f"Fetching option overview from {URL} ...")
@@ -71,18 +75,28 @@ def fetch_option_chain():
                 else:
                     bid_el, ask_el = bid_put, ask_put
 
-                bid_val = _parse_eu_number(bid_el.get_text(strip=True)) if bid_el and bid_el.get_text(strip=True) else None
-                ask_val = _parse_eu_number(ask_el.get_text(strip=True)) if ask_el and ask_el.get_text(strip=True) else None
+                bid_val = (
+                    _parse_eu_number(bid_el.get_text(strip=True))
+                    if bid_el and bid_el.get_text(strip=True)
+                    else None
+                )
+                ask_val = (
+                    _parse_eu_number(ask_el.get_text(strip=True))
+                    if ask_el and ask_el.get_text(strip=True)
+                    else None
+                )
 
-                options.append({
-                    "type": opt_type,
-                    "expiry": expiry_text,
-                    "strike": strike,
-                    "issue_id": issue_id,
-                    "url": full_url,
-                    "bid": bid_val,
-                    "ask": ask_val
-                })
+                options.append(
+                    {
+                        "type": opt_type,
+                        "expiry": expiry_text,
+                        "strike": strike,
+                        "issue_id": issue_id,
+                        "url": full_url,
+                        "bid": bid_val,
+                        "ask": ask_val,
+                    }
+                )
 
     print(f"Found {len(options)} options in total.")
     return options
@@ -111,12 +125,7 @@ def get_live_price(issue_id: str, detail_url: str):
     volume_text = vol_el.get_text(strip=True).replace("\xa0", "") if vol_el else None
     volume = int(volume_text) if volume_text and volume_text.isdigit() else None
 
-    return {
-        "last_raw": last_raw,
-        "last": last_val,
-        "date_text": date_text,
-        "volume": volume
-    }
+    return {"last_raw": last_raw, "last": last_val, "date_text": date_text, "volume": volume}
 
 
 def get_historical_prices(issue_id):
@@ -137,6 +146,7 @@ def get_historical_prices(issue_id):
         out.append({"date": date, "price": price})
     return out
 
+
 # ------------------ Main logic ------------------
 
 if __name__ == "__main__":
@@ -144,11 +154,14 @@ if __name__ == "__main__":
 
     # Zoek de gewenste optie
     target = next(
-        (o for o in options
-         if "November 2025" in o["expiry"]
-         and o["type"] == "Call"
-         and o["strike"].startswith("38")),
-        None
+        (
+            o
+            for o in options
+            if "November 2025" in o["expiry"]
+            and o["type"] == "Call"
+            and o["strike"].startswith("38")
+        ),
+        None,
     )
 
     if not target:

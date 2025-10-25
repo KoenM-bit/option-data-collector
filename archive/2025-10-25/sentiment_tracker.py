@@ -25,39 +25,49 @@ TICKER = "AD.AS"  # Koninklijke Ahold Delhaize
 # Database hulpfuncties
 # ---------------------------
 
+
 def get_connection():
     return mysql.connector.connect(**DB_CONFIG)
+
 
 def get_last_record(conn, ticker):
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        "SELECT * FROM sentiment_data WHERE ticker = %s ORDER BY timestamp DESC LIMIT 1",
-        (ticker,)
+        "SELECT * FROM sentiment_data WHERE ticker = %s ORDER BY timestamp DESC LIMIT 1", (ticker,)
     )
     row = cursor.fetchone()
     cursor.close()
     return row
+
 
 def records_differ(old, new):
     """Controleer of het nieuwe record inhoudelijk verschilt van het oude."""
     if not old:
         return True
     keys_to_compare = [
-        "rating_avg", "rating_label", "target_avg",
-        "target_high", "target_low", "sentiment_score",
-        "buy_count", "hold_count", "sell_count"
+        "rating_avg",
+        "rating_label",
+        "target_avg",
+        "target_high",
+        "target_low",
+        "sentiment_score",
+        "buy_count",
+        "hold_count",
+        "sell_count",
     ]
     for k in keys_to_compare:
         if str(old.get(k)) != str(new.get(k)):
             return True
     return False
 
+
 def save_to_db(data):
     conn = get_connection()
     cursor = conn.cursor()
 
     # Zorg dat tabel bestaat
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS sentiment_data (
             id INT AUTO_INCREMENT PRIMARY KEY,
             ticker VARCHAR(32),
@@ -74,7 +84,8 @@ def save_to_db(data):
             months_considered INT,
             trend_json JSON
         )
-    """)
+    """
+    )
 
     last = get_last_record(conn, data["ticker"])
     if not records_differ(last, data):
@@ -83,36 +94,41 @@ def save_to_db(data):
         conn.close()
         return
 
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO sentiment_data
         (ticker, rating_avg, rating_label, target_avg, target_high, target_low,
          sentiment_score, timestamp, buy_count, hold_count, sell_count,
          months_considered, trend_json)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (
-        data["ticker"],
-        data["rating_avg"],
-        data["rating_label"],
-        data["target_avg"],
-        data["target_high"],
-        data["target_low"],
-        data["sentiment_score"],
-        datetime.now(timezone.utc),
-        data["buy_count"],
-        data["hold_count"],
-        data["sell_count"],
-        data["months_considered"],
-        data["trend_json"],
-    ))
+    """,
+        (
+            data["ticker"],
+            data["rating_avg"],
+            data["rating_label"],
+            data["target_avg"],
+            data["target_high"],
+            data["target_low"],
+            data["sentiment_score"],
+            datetime.now(timezone.utc),
+            data["buy_count"],
+            data["hold_count"],
+            data["sell_count"],
+            data["months_considered"],
+            data["trend_json"],
+        ),
+    )
 
     conn.commit()
     cursor.close()
     conn.close()
     print(f"Nieuw sentimentrecord opgeslagen voor {data['ticker']}.")
 
+
 # ---------------------------
 # Yahoo Finance sentiment
 # ---------------------------
+
 
 def get_yf_sentiment(ticker: str = TICKER):
     print(f"Ophalen van sentimentdata voor {ticker} ...")
@@ -163,9 +179,15 @@ def get_yf_sentiment(ticker: str = TICKER):
 
     elif recs is not None and not recs.empty:
         recs_recent = recs.tail(10)
-        buy_count = len(recs_recent[recs_recent["To Grade"].str.contains("Buy", case=False, na=False)])
-        hold_count = len(recs_recent[recs_recent["To Grade"].str.contains("Hold", case=False, na=False)])
-        sell_count = len(recs_recent[recs_recent["To Grade"].str.contains("Sell", case=False, na=False)])
+        buy_count = len(
+            recs_recent[recs_recent["To Grade"].str.contains("Buy", case=False, na=False)]
+        )
+        hold_count = len(
+            recs_recent[recs_recent["To Grade"].str.contains("Hold", case=False, na=False)]
+        )
+        sell_count = len(
+            recs_recent[recs_recent["To Grade"].str.contains("Sell", case=False, na=False)]
+        )
         months_considered = 1
         trend_data = recs_recent.to_dict(orient="records")
 
@@ -186,6 +208,7 @@ def get_yf_sentiment(ticker: str = TICKER):
     }
 
     return result
+
 
 # ---------------------------
 # Main-run

@@ -20,7 +20,7 @@ DB_CONFIG = {
     "user": "remoteuser",
     "password": "T3l3foon32#123",
     "database": "optionsdb",
-    "port": 3306
+    "port": 3306,
 }
 
 # ---------------------------------------------------
@@ -28,22 +28,25 @@ DB_CONFIG = {
 # ---------------------------------------------------
 FD_BASE = "https://beurs.fd.nl/derivaten/opties/"
 
+
 # ---------------------------------------------------
 # 🔢 Helpers
 # ---------------------------------------------------
 def _to_int(s: str) -> int | None:
     if not s:
         return None
-    s = s.strip().replace('.', '').replace('\xa0', '').replace(' ', '')
-    m = re.search(r'-?\d+', s)
+    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "")
+    m = re.search(r"-?\d+", s)
     return int(m.group(0)) if m else None
+
 
 def _to_float_nl(s: str) -> float | None:
     if not s:
         return None
-    s = s.strip().replace('.', '').replace('\xa0', '').replace(' ', '').replace(',', '.')
-    m = re.search(r'-?\d+(\.\d+)?', s)
+    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "").replace(",", ".")
+    m = re.search(r"-?\d+(\.\d+)?", s)
     return float(m.group(0)) if m else None
+
 
 # ---------------------------------------------------
 # 🕵️‍♂️ Scraper-functie
@@ -66,7 +69,7 @@ def fetch_fd_overview(symbol_code: str = "AEX.AH/O") -> dict:
     koers = _to_float_nl(data_tds[1].get_text())
     vorige = _to_float_nl(data_tds[2].get_text())
     delta = _to_float_nl(data_tds[3].get_text())
-    delta_pct = _to_float_nl(data_tds[4].get_text(strip=True).replace('%', ''))
+    delta_pct = _to_float_nl(data_tds[4].get_text(strip=True).replace("%", ""))
     hoog = _to_float_nl(data_tds[5].get_text())
     laag = _to_float_nl(data_tds[6].get_text())
     volume_ul = _to_int(data_tds[7].get_text())
@@ -138,6 +141,7 @@ def fetch_fd_overview(symbol_code: str = "AEX.AH/O") -> dict:
         "source": url,
     }
 
+
 # ---------------------------------------------------
 # 💾 Opslaan in MySQL (met upsert)
 # ---------------------------------------------------
@@ -146,7 +150,8 @@ def save_to_db(data: dict):
     cur = conn.cursor()
 
     # Tabel aanmaken + unieke key (ticker + peildatum)
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS fd_option_overview (
             id INT AUTO_INCREMENT PRIMARY KEY,
             ticker VARCHAR(10),
@@ -171,7 +176,8 @@ def save_to_db(data: dict):
             source VARCHAR(255),
             UNIQUE KEY uniq_overview (ticker, peildatum)
         )
-    """)
+    """
+    )
 
     q = """
         INSERT INTO fd_option_overview (
@@ -211,7 +217,7 @@ def save_to_db(data: dict):
         "ticker": data["ticker"],
         "symbol_code": data["symbol_code"],
         "scraped_at": data["scraped_at"],
-        "source": data["source"]
+        "source": data["source"],
     }
 
     cur.execute(q, params)
@@ -219,6 +225,7 @@ def save_to_db(data: dict):
     cur.close()
     conn.close()
     print("✅ Data opgeslagen of bijgewerkt in fd_option_overview")
+
 
 # ---------------------------------------------------
 # 🚀 Main

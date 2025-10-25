@@ -24,6 +24,7 @@ MARKET_CLOSE_HOUR = 17
 # 🧮 NUMMER-CONVERSIES
 # =====================================================
 
+
 def _to_int(value):
     """Converteer Europese string naar int, retourneer None bij fout."""
     if not value or value in ("--", ""):
@@ -61,8 +62,8 @@ def _to_float_nl(s: str) -> float | None:
     """Parseer floats met NL notatie (gebruikt in FD-scrapers)."""
     if not s:
         return None
-    s = s.strip().replace('.', '').replace('\xa0', '').replace(' ', '').replace(',', '.')
-    m = re.search(r'-?\d+(\.\d+)?', s)
+    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "").replace(",", ".")
+    m = re.search(r"-?\d+(\.\d+)?", s)
     return float(m.group(0)) if m else None
 
 
@@ -70,8 +71,8 @@ def _to_int_nl(s: str) -> int | None:
     """Parseer ints met NL notatie (gebruikt in FD-scrapers)."""
     if not s:
         return None
-    s = s.strip().replace('.', '').replace('\xa0', '').replace(' ', '')
-    m = re.search(r'-?\d+', s)
+    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "")
+    m = re.search(r"-?\d+", s)
     return int(m.group(0)) if m else None
 
 
@@ -91,6 +92,7 @@ def _to_date(value):
 # 🕒 TIJD / MARKTLOGICA
 # =====================================================
 
+
 def is_market_open() -> bool:
     """
     Controleer of de huidige tijd binnen beursuren (09:00–17:00 Amsterdam) valt.
@@ -104,6 +106,7 @@ def wait_minutes(minutes: int):
     Slaap helper (gebruikt voor loops/schedulers).
     """
     import time
+
     print(f"⏳ Wachten {minutes} minuten...")
     time.sleep(minutes * 60)
 
@@ -111,6 +114,7 @@ def wait_minutes(minutes: int):
 # =====================================================
 # 🔗 URL / SCRAPING HELPERS
 # =====================================================
+
 
 def clean_href(href: str) -> str:
     """
@@ -138,6 +142,7 @@ def fetch_html(url: str, headers=None, timeout=20) -> BeautifulSoup:
 # =====================================================
 
 EURIBOR_CACHE = {}
+
 
 def get_current_euribor(months=1) -> float:
     """
@@ -185,6 +190,7 @@ def risk_free_rate_for_days(days: int) -> float:
 # 🧾 STRING HELPERS
 # =====================================================
 
+
 def safe_str(val) -> str:
     """Converteert None of NaN naar lege string voor veilige DB-ops."""
     if val is None:
@@ -207,6 +213,7 @@ def normalize_strike(strike: str) -> str:
 # =====================================================
 # 🧰 PRINT / LOGGING HELPERS
 # =====================================================
+
 
 def log_section(title: str):
     """Druk nette sectiekop in console."""

@@ -9,16 +9,17 @@ import json
 app = Flask(__name__)
 
 # Swagger configuratie
-app.config['SWAGGER'] = {
-    'title': 'KoenMarijt API',
-    'uiversion': 3,
-    'description': 'Endpoints voor optieprijzen, sentimentdata en trendanalyse'
+app.config["SWAGGER"] = {
+    "title": "KoenMarijt API",
+    "uiversion": 3,
+    "description": "Endpoints voor optieprijzen, sentimentdata en trendanalyse",
 }
 swagger = Swagger(app)
 
 # ------------------------
 # OPTIE ENDPOINTS
 # ------------------------
+
 
 @app.route("/api/latest")
 def latest_price():
@@ -27,8 +28,10 @@ def latest_price():
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM option_prices ORDER BY timestamp DESC LIMIT 1")
     row = cur.fetchone()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     return jsonify(row or {"error": "No data yet"})
+
 
 @app.route("/api/recent/<int:limit>")
 def recent_prices(limit):
@@ -37,8 +40,10 @@ def recent_prices(limit):
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM option_prices ORDER BY timestamp DESC LIMIT %s", (limit,))
     rows = cur.fetchall()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     return jsonify(rows)
+
 
 @app.route("/api/latest/<string:expiry>/<string:strike>")
 def latest_by_expiry_and_strike(expiry, strike):
@@ -55,8 +60,10 @@ def latest_by_expiry_and_strike(expiry, strike):
     """
     cur.execute(query, (f"%{expiry}%", f"%{strike_norm}%"))
     row = cur.fetchone()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     return jsonify(row or {"error": f"No data found for {expiry} {strike}"})
+
 
 @app.route("/api/contracts")
 def list_contracts():
@@ -65,21 +72,28 @@ def list_contracts():
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT DISTINCT expiry, strike, type FROM option_prices ORDER BY expiry, strike")
     rows = cur.fetchall()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     return jsonify(rows)
+
 
 # ------------------------
 # SENTIMENT ENDPOINTS
 # ------------------------
+
 
 @app.route("/api/sentiment/<string:ticker>")
 def latest_sentiment(ticker):
     """Laatste sentimentanalyse voor een ticker."""
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM sentiment_data WHERE ticker=%s ORDER BY timestamp DESC LIMIT 1", (ticker.upper(),))
+    cur.execute(
+        "SELECT * FROM sentiment_data WHERE ticker=%s ORDER BY timestamp DESC LIMIT 1",
+        (ticker.upper(),),
+    )
     row = cur.fetchone()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     if not row:
         return jsonify({"error": f"No sentiment found for {ticker.upper()}"})
 
@@ -97,14 +111,18 @@ def latest_sentiment(ticker):
     row["trend_json"] = trend_json
     return jsonify(row)
 
+
 @app.route("/api/status")
 def status():
     """API-status."""
-    return jsonify({
-        "status": "running",
-        "timestamp": dt.datetime.now().isoformat(),
-        "services": ["option-api", "sentiment-tracker", "option-scraper"]
-    })
+    return jsonify(
+        {
+            "status": "running",
+            "timestamp": dt.datetime.now().isoformat(),
+            "services": ["option-api", "sentiment-tracker", "option-scraper"],
+        }
+    )
+
 
 # ------------------------
 # RUN APP

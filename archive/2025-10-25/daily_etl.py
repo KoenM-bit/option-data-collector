@@ -32,7 +32,7 @@ DB_CONFIG = {
     "user": "remoteuser",
     "password": "T3l3foon32#123",
     "database": "optionsdb",
-    "port": 3306
+    "port": 3306,
 }
 
 

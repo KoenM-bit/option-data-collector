@@ -7,8 +7,14 @@ from app.utils.helpers import risk_free_rate_for_days
 
 SQRT_2PI = math.sqrt(2 * math.pi)
 
-def phi(x): return math.exp(-0.5 * x * x) / SQRT_2PI
-def Phi(x): return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
+def phi(x):
+    return math.exp(-0.5 * x * x) / SQRT_2PI
+
+
+def Phi(x):
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
 
 def d1_d2(S, K, t, r, sigma):
     if S <= 0 or K <= 0 or t <= 0 or sigma <= 0:
@@ -17,22 +23,27 @@ def d1_d2(S, K, t, r, sigma):
     d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * t) / vol_sqrt_t
     return d1, d1 - vol_sqrt_t
 
+
 def bs_price(S, K, t, r, sigma, call=True):
     d1, d2 = d1_d2(S, K, t, r, sigma)
     df = math.exp(-r * t)
     return (S * Phi(d1) - K * df * Phi(d2)) if call else (K * df * Phi(-d2) - S * Phi(-d1))
 
+
 def bs_delta(S, K, t, r, sigma, call=True):
     d1, _ = d1_d2(S, K, t, r, sigma)
     return Phi(d1) if call else (Phi(d1) - 1)
+
 
 def bs_gamma(S, K, t, r, sigma):
     d1, _ = d1_d2(S, K, t, r, sigma)
     return phi(d1) / (S * sigma * math.sqrt(t))
 
+
 def bs_vega(S, K, t, r, sigma):
     d1, _ = d1_d2(S, K, t, r, sigma)
     return S * phi(d1) * math.sqrt(t)
+
 
 def implied_vol(price, S, K, t, r, call=True, tol=1e-6, max_iter=100):
     """Berekent implied volatility via Newton-Raphson."""
@@ -50,6 +61,7 @@ def implied_vol(price, S, K, t, r, call=True, tol=1e-6, max_iter=100):
             break
     return float("nan")
 
+
 def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
     """Bereken en sla Greeks op voor alle opties van één dag.
     - Neemt mid price (bid/ask) als beschikbaar, anders last.
@@ -58,7 +70,9 @@ def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
     if not peildatum:
-        cur.execute("SELECT MAX(peildatum) AS d FROM fd_option_contracts WHERE ticker=%s", (ticker,))
+        cur.execute(
+            "SELECT MAX(peildatum) AS d FROM fd_option_contracts WHERE ticker=%s", (ticker,)
+        )
         peildatum = cur.fetchone()["d"]
 
     cur.execute(
@@ -102,20 +116,22 @@ def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
         gamma = bs_gamma(S, K, t, r, sigma)
         vega = bs_vega(S, K, t, r, sigma)
 
-        results.append({
-            "contract_id": c["id"],
-            "ticker": ticker,
-            "peildatum": peildatum,
-            "expiry": c["expiry"],
-            "strike": K,
-            "type": c["type"],
-            "price": price,
-            "iv": sigma,
-            "delta": delta,
-            "gamma": gamma,
-            "vega": vega,
-            "created_at": datetime.now(),
-        })
+        results.append(
+            {
+                "contract_id": c["id"],
+                "ticker": ticker,
+                "peildatum": peildatum,
+                "expiry": c["expiry"],
+                "strike": K,
+                "type": c["type"],
+                "price": price,
+                "iv": sigma,
+                "delta": delta,
+                "gamma": gamma,
+                "vega": vega,
+                "created_at": datetime.now(),
+            }
+        )
 
     # Opslaan
     if results:
@@ -133,10 +149,12 @@ def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
                 """,
                 r,
             )
-        conn.commit(); cur.close()
+        conn.commit()
+        cur.close()
 
     conn.close()
     print(f"{len(results)} Greeks berekend voor {ticker} ({peildatum})")
+
 
 if __name__ == "__main__":
     compute_greeks_for_day()

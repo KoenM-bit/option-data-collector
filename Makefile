@@ -109,11 +109,11 @@ test-all: ## Run import check, greeks, scores, and one scraper pass
 lint: dev-install ## Run ruff (lint + import order)
 	$(VENV)/bin/ruff check .
 
-format: dev-install ## Format with black
-	$(VENV)/bin/black .
+format: dev-install ## Format with black (source + tests only)
+	$(VENV)/bin/black app tests
 
 format-check: dev-install ## Check formatting (black --check)
-	$(VENV)/bin/black --check .
+	$(VENV)/bin/black --check app tests
 
 test: dev-install ## Run pytest (all tests)
 	$(VENV)/bin/pytest -q

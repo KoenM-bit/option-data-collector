@@ -13,16 +13,18 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 #  Configuratie
 # -------------------------------
 TIMEZONE = pytz.timezone("Europe/Amsterdam")
-MARKET_OPEN = 9   # 09:00
-MARKET_CLOSE = 17 # 17:00
+MARKET_OPEN = 9  # 09:00
+MARKET_CLOSE = 17  # 17:00
 
 # -------------------------------
 # Helpers
 # -------------------------------
 
+
 def clean_href(href: str) -> str:
     href = href.replace("../../../", "/")
     return f"{BASE}{href}"
+
 
 def _parse_eu_number(s: str) -> float:
     s = (s or "").strip().replace("\xa0", "")
@@ -32,14 +34,17 @@ def _parse_eu_number(s: str) -> float:
     except ValueError:
         return None
 
+
 def is_market_open() -> bool:
     """Controleer of het nu tussen 09:00 en 17:00 in Amsterdam is."""
     now = dt.datetime.now(TIMEZONE)
     return MARKET_OPEN <= now.hour < MARKET_CLOSE
 
+
 # -------------------------------
 # Fetch functies
 # -------------------------------
+
 
 def fetch_option_chain():
     print(f"Fetching option overview from {URL} ...")
@@ -68,19 +73,30 @@ def fetch_option_chain():
                     continue
                 full_url = clean_href(href)
                 bid_el, ask_el = (bid_call, ask_call) if opt_type == "Call" else (bid_put, ask_put)
-                bid_val = _parse_eu_number(bid_el.get_text(strip=True)) if bid_el and bid_el.get_text(strip=True) else None
-                ask_val = _parse_eu_number(ask_el.get_text(strip=True)) if ask_el and ask_el.get_text(strip=True) else None
-                options.append({
-                    "type": opt_type,
-                    "expiry": expiry_text,
-                    "strike": strike,
-                    "issue_id": issue_id,
-                    "url": full_url,
-                    "bid": bid_val,
-                    "ask": ask_val
-                })
+                bid_val = (
+                    _parse_eu_number(bid_el.get_text(strip=True))
+                    if bid_el and bid_el.get_text(strip=True)
+                    else None
+                )
+                ask_val = (
+                    _parse_eu_number(ask_el.get_text(strip=True))
+                    if ask_el and ask_el.get_text(strip=True)
+                    else None
+                )
+                options.append(
+                    {
+                        "type": opt_type,
+                        "expiry": expiry_text,
+                        "strike": strike,
+                        "issue_id": issue_id,
+                        "url": full_url,
+                        "bid": bid_val,
+                        "ask": ask_val,
+                    }
+                )
     print(f"Found {len(options)} options in total.")
     return options
+
 
 def get_live_price(issue_id: str, detail_url: str):
     r = requests.get(detail_url, headers=HEADERS)
@@ -99,16 +115,18 @@ def get_live_price(issue_id: str, detail_url: str):
     volume = int(volume_text) if volume_text and volume_text.isdigit() else None
     return {"last_raw": last_raw, "last": last_val, "date_text": date_text, "volume": volume}
 
+
 def save_price_to_db(option, price, source):
     conn = mysql.connector.connect(
         host="192.168.1.200",
         user="remoteuser",
         password="T3l3foon32#123",
         database="optionsdb",
-        port=3306
+        port=3306,
     )
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS option_prices (
             id INT AUTO_INCREMENT PRIMARY KEY,
             issue_id VARCHAR(32),
@@ -119,16 +137,20 @@ def save_price_to_db(option, price, source):
             source VARCHAR(20),
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-    """)
-    cursor.execute("""
+    """
+    )
+    cursor.execute(
+        """
         INSERT INTO option_prices (issue_id, expiry, type, strike, price, source)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (option["issue_id"], option["expiry"], option["type"],
-          option["strike"], price, source))
+    """,
+        (option["issue_id"], option["expiry"], option["type"], option["strike"], price, source),
+    )
     conn.commit()
     cursor.close()
     conn.close()
     print(f"✅ Saved {price} ({source}) for {option['strike']} {option['type']}")
+
 
 # -------------------------------
 # Main loop met tijdsvenster
