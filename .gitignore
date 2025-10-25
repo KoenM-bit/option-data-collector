@@ -30,9 +30,6 @@ pip-wheel-metadata/
 *.log
 logs/
 
-# Docker
-.dockerignore
-
 # Misc
 data/
 backups/

@@ -1,6 +1,5 @@
 # app/compute/compute_option_score.py
 # -*- coding: utf-8 -*-
-import math
 from app.db import get_connection
 
 def compute_option_score(ticker="AD.AS"):

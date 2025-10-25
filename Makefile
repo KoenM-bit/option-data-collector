@@ -19,8 +19,9 @@ ENV_EXPORT := set -a; [ -f .env ] && . ./.env; set +a;
 # Run each recipe in a single shell so here-docs work across lines
 .ONESHELL:
 
-.PHONY: help venv install clean clean-venv fresh-start check-imports \
+.PHONY: help venv install dev-install clean clean-venv fresh-start check-imports \
 	run-api run-etl run-sentiment run-scraper run-scraper-once test-greeks test-score test-all \
+	lint format format-check test test-smoke \
 	docker-build docker-up docker-logs docker-down docker-restart docker-clean \
 	docker-wait-api docker-health docker-test-api docker-test
 
@@ -40,6 +41,13 @@ venv: ## Create local virtualenv (.venv)
 
 install: venv ## Install Python dependencies
 	$(PIP) install -r requirements.txt
+
+dev-install: venv ## Install dev tools (pytest, ruff, black)
+	@if [ -f requirements-dev.txt ]; then \
+		$(PIP) install -r requirements-dev.txt; \
+	else \
+		$(PIP) install pytest ruff black; \
+	fi
 
 clean: ## Remove caches and build artifacts
 	find . -name '__pycache__' -type d -exec rm -rf {} + || true
@@ -94,6 +102,24 @@ test-all: ## Run import check, greeks, scores, and one scraper pass
 	$(MAKE) test-greeks
 	$(MAKE) test-score
 	$(MAKE) run-scraper-once
+
+# -----------------------------
+# Linting, formatting, testing
+# -----------------------------
+lint: dev-install ## Run ruff (lint + import order)
+	$(VENV)/bin/ruff check .
+
+format: dev-install ## Format with black
+	$(VENV)/bin/black .
+
+format-check: dev-install ## Check formatting (black --check)
+	$(VENV)/bin/black --check .
+
+test: dev-install ## Run pytest (all tests)
+	$(VENV)/bin/pytest -q
+
+test-smoke: dev-install ## Run only smoke tests
+	$(VENV)/bin/pytest -q -k smoke
 
 # -----------------------------
 # Docker workflow

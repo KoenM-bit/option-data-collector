@@ -9,7 +9,7 @@ Geporteerd uit legacy sentiment_tracker.py en aangepast voor app/ structuur.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 import time
 
 import yfinance as yf
@@ -179,15 +179,9 @@ def get_yf_sentiment(ticker: str = "AD.AS"):
 	target_low_price = info.get("targetLowPrice")
 
 	sentiment_score = None
-	sentiment_label = "Onbekend"
 	if recommendation_mean is not None:
 		sentiment_score = round((3 - recommendation_mean) / 2, 2)
-		if sentiment_score > 0.2:
-			sentiment_label = "Bullish"
-		elif sentiment_score < -0.2:
-			sentiment_label = "Bearish"
-		else:
-			sentiment_label = "Neutraal"
+		# label is derived from score when needed, but not stored currently
 
 	# yfinance object properties can also raise; guard with retries where possible
 	try:

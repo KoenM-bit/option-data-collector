@@ -1,0 +1,17 @@
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+exclude = [
+  ".venv",
+  "venv",
+  "archive",
+  "__pycache__",
+]
+
+[tool.ruff.lint]
+# Keep ruff minimal and non-intrusive: only Pyflakes (F) for real errors
+select = ["F"]
+ignore = []

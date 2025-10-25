@@ -79,6 +79,43 @@ All run/test targets auto-load `.env`.
 
 The API listens on `http://127.0.0.1:8080` by default.
 
+## CI/CD and GHCR
+
+On every push to `main`, GitHub Actions will:
+
+- install deps, run lint (ruff F-only) and formatting check (black), and run pytest smoke tests
+- build the Docker image and push it to GitHub Container Registry (GHCR) as:
+  - `ghcr.io/<owner>/option-data-collector:latest`
+  - `ghcr.io/<owner>/option-data-collector:<git-sha>`
+
+On git tag pushes (e.g., `v1.2.3`), the workflow also publishes semver tags:
+
+- `ghcr.io/<owner>/option-data-collector:1.2.3`
+- `ghcr.io/<owner>/option-data-collector:1.2`
+- `ghcr.io/<owner>/option-data-collector:1`
+
+Notes:
+
+- The push uses the built-in `GITHUB_TOKEN`, so no extra secrets are needed.
+- Images are private by default if the repository is private. To pull from other machines, ensure you’re authenticated to GHCR and have access.
+
+Pull and run (example):
+
+```bash
+# Login to GHCR (only needed once per environment)
+echo $GITHUB_TOKEN | docker login ghcr.io -u <github-username> --password-stdin
+
+# Pull the latest image
+docker pull ghcr.io/<owner>/option-data-collector:latest
+
+# Run the API service (provide DB env vars as needed)
+docker run --rm -p 8080:8080 \
+  -e DB_HOST=... -e DB_USER=... -e DB_PASS=... -e DB_NAME=... -e DB_PORT=3306 \
+  ghcr.io/<owner>/option-data-collector:latest
+```
+
+Replace `<owner>` with your GitHub username or org (lowercase). If the repo is private, the `GITHUB_TOKEN` or a PAT with `read:packages` scope is required for pulling.
+
 ## API endpoints
 
 - `GET /api/status` — stack status
