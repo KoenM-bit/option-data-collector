@@ -79,6 +79,19 @@ All run/test targets auto-load `.env`.
 
 The API listens on `http://127.0.0.1:8080` by default.
 
+### Single-container modes (for Portainer/Synology)
+
+The image supports multiple modes via the entrypoint:
+
+- API only (default):
+  - Command: `api` (or leave default)
+- All-in-one (run API + scraper + daily-etl loop + sentiment loop inside one container):
+  - Command: `all` (or set `MODE=all` env)
+- Individual workers:
+  - Command: `scraper` | `daily-etl` | `sentiment`
+
+All-in-one prefixes logs with `[api]`, `[scraper]`, `[daily-etl]`, and `[sentiment]` so you can see everything in one log stream in Portainer.
+
 ## CI/CD and GHCR
 
 On every push to `main`, GitHub Actions will:
@@ -112,6 +125,11 @@ docker pull ghcr.io/<owner>/option-data-collector:latest
 docker run --rm -p 8080:8080 \
   -e DB_HOST=... -e DB_USER=... -e DB_PASS=... -e DB_NAME=... -e DB_PORT=3306 \
   ghcr.io/<owner>/option-data-collector:latest
+
+# Run everything in one container and see all logs prefixed
+docker run --rm -p 8080:8080 \
+  -e DB_HOST=... -e DB_USER=... -e DB_PASS=... -e DB_NAME=... -e DB_PORT=3306 \
+  ghcr.io/<owner>/option-data-collector:latest all
 ```
 
 Replace `<owner>` with your GitHub username or org (lowercase). If the repo is private, the `GITHUB_TOKEN` or a PAT with `read:packages` scope is required for pulling.

@@ -22,5 +22,10 @@ COPY app ./app
 # Expose API port
 EXPOSE 8080
 
-# Default: run the API
-CMD ["python", "-m", "app.api.routes"]
+# Entrypoint supports single-process (api) and all-in-one modes
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+# Default mode: api (single service)
+CMD ["api"]

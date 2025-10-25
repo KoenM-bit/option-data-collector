@@ -12,6 +12,11 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/status"]
       interval: 30s
@@ -30,6 +35,11 @@ services:
       - DB_NAME=${DB_NAME:-optionsdb}
       - DB_PORT=${DB_PORT:-3306}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   sentiment:
     build: .
@@ -44,6 +54,11 @@ services:
       - DB_NAME=${DB_NAME:-optionsdb}
       - DB_PORT=${DB_PORT:-3306}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   daily-etl:
     build: .
@@ -58,6 +73,11 @@ services:
       - DB_NAME=${DB_NAME:-optionsdb}
       - DB_PORT=${DB_PORT:-3306}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 # Note: If your DB is only reachable on the host network, you can enable host networking:
 #   network_mode: host

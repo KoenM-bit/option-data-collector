@@ -22,7 +22,7 @@ ENV_EXPORT := set -a; [ -f .env ] && . ./.env; set +a;
 .PHONY: help venv install dev-install clean clean-venv fresh-start check-imports \
 	run-api run-etl run-sentiment run-scraper run-scraper-once test-greeks test-score test-all \
 	lint format format-check test test-smoke \
-	docker-build docker-up docker-logs docker-down docker-restart docker-clean \
+	docker-build docker-up docker-logs docker-logs-ts docker-up-logs docker-down docker-restart docker-clean \
 	docker-wait-api docker-health docker-test-api docker-test
 
 help: ## Show this help
@@ -133,6 +133,13 @@ docker-up: ## Start services with Docker Compose (also builds if needed)
 
 docker-logs: ## Tail service logs
 	$(DOCKER_COMPOSE) logs -f --tail=100
+
+docker-logs-ts: ## Tail service logs with timestamps
+	$(DOCKER_COMPOSE) logs -f --tail=200 --timestamps
+
+docker-up-logs: ## Start services and immediately tail all logs (timestamps)
+	$(DOCKER_COMPOSE) up -d
+	$(DOCKER_COMPOSE) logs -f --tail=200 --timestamps
 
 docker-down: ## Stop and remove services
 	$(DOCKER_COMPOSE) down
