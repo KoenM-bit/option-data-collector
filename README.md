@@ -92,6 +92,21 @@ The image supports multiple modes via the entrypoint:
 
 All-in-one prefixes logs with `[api]`, `[scraper]`, `[daily-etl]`, and `[sentiment]` so you can see everything in one log stream in Portainer.
 
+### Portainer Stack (multi-container)
+
+Use `deploy/portainer-stack.yml` to run each service as its own container (best practice). In Portainer:
+
+1. Stacks → Add stack
+2. Name: `option-data-collector`
+3. Paste the contents of `deploy/portainer-stack.yml` (or upload it)
+4. Set environment variables (DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT) in the UI or via an env file
+5. Deploy the stack
+
+Notes:
+- The stack references the prebuilt image `ghcr.io/<owner>/option-data-collector:latest` (owner is lowercase; for this repo it’s `koenm-bit`).
+- If your GHCR image is private, configure registry auth in Portainer or provide credentials.
+- Logs are per-container; use Portainer’s container logs for each service, or the stack log aggregation if available.
+
 ## CI/CD and GHCR
 
 On every push to `main`, GitHub Actions will:

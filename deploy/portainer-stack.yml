@@ -1,0 +1,83 @@
+# Portainer stack file (standalone)
+# Uses prebuilt image from GHCR and runs each component as its own container.
+# Paste this into Portainer > Stacks > Add stack, or save and upload.
+
+services:
+  api:
+    image: ghcr.io/koenm-bit/option-data-collector:latest
+    container_name: option-api
+    environment:
+      - TZ=Europe/Amsterdam
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT-3306}
+    command: ["api"]
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scraper:
+    image: ghcr.io/koenm-bit/option-data-collector:latest
+    container_name: option-scraper
+    environment:
+      - TZ=Europe/Amsterdam
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT-3306}
+    command: ["scraper"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  sentiment:
+    image: ghcr.io/koenm-bit/option-data-collector:latest
+    container_name: sentiment-tracker
+    environment:
+      - TZ=Europe/Amsterdam
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT-3306}
+    command: ["sentiment"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  daily-etl:
+    image: ghcr.io/koenm-bit/option-data-collector:latest
+    container_name: daily-etl
+    environment:
+      - TZ=Europe/Amsterdam
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT-3306}
+    command: ["daily-etl"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

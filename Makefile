@@ -185,3 +185,13 @@ docker-test: ## Bring up stack and run API health checks
 	$(MAKE) docker-up
 	$(MAKE) docker-health
 	$(MAKE) docker-test-api
+
+# -----------------------------
+# Portainer/local stack test (prebuilt image)
+# -----------------------------
+.PHONY: docker-up-portainer docker-down-portainer
+docker-up-portainer: ## Start services using the Portainer stack file (pulls GHCR image)
+	$(DOCKER_COMPOSE) -f deploy/portainer-stack.yml up -d
+
+docker-down-portainer: ## Stop services from the Portainer stack file
+	$(DOCKER_COMPOSE) -f deploy/portainer-stack.yml down
