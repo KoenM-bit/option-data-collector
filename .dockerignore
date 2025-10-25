@@ -1,0 +1,41 @@
+# VCS
+.git
+.gitignore
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Python caches and venvs
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+.ipynb_checkpoints/
+
+# Logs and coverage
+*.log
+logs/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+
+# Local data/secrets
+.env
+data/
+backups/
+
+# Unneeded legacy
+archive/
