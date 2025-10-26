@@ -103,15 +103,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger Watchtower on Synology
-        if: success()    # alleen uitvoeren als de build geslaagd is
+        if: success()
         run: |
-          curl -s -o /dev/null -w "%{http_code}\n" \
-            -H "Authorization: Bearer ${{ secrets.WATCHTOWER_TOKEN }}" \
-            ${{ secrets.WATCHTOWER_URL }}/v1/update
-
-      - name: Trigger Watchtower on Synology
-        if: success()    # alleen uitvoeren als de build geslaagd is
-        run: |
-          curl -s -o /dev/null -w "%{http_code}\n" \
+          echo "Triggering Watchtower update..."
+          curl -v \
             -H "Authorization: Bearer ${{ secrets.WATCHTOWER_TOKEN }}" \
             ${{ secrets.WATCHTOWER_URL }}/v1/update
