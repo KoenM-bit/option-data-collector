@@ -26,6 +26,9 @@ EXPOSE 8080
 COPY docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+RUN rm -f /etc/resolv.conf || true
+
 ENTRYPOINT ["/app/entrypoint.sh"]
 # Default mode: api (single service)
 CMD ["api"]
+
