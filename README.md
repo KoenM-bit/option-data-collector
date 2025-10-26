@@ -107,6 +107,19 @@ Notes:
 - If your GHCR image is private, configure registry auth in Portainer or provide credentials.
 - Logs are per-container; use Portainer’s container logs for each service, or the stack log aggregation if available.
 
+### ETL-only Docker Compose (run once)
+
+For a quick end-to-end ETL test without other services, use the ETL-only compose:
+
+- Build and run once (exits when done):
+  - `make docker-etl-up`
+- Tail logs:
+  - `make docker-etl-logs`
+- Tear down:
+  - `make docker-etl-down`
+
+This uses `deploy/docker-compose.etl.yml`, which builds the image locally and runs `python -m app.etl.daily_etl` a single time.
+
 ## CI/CD and GHCR
 
 On every push to `main`, GitHub Actions will:

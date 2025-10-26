@@ -23,7 +23,8 @@ ENV_EXPORT := set -a; [ -f .env ] && . ./.env; set +a;
 	run-api run-etl run-sentiment run-scraper run-scraper-once test-greeks test-score test-all \
 	lint format format-check test test-smoke \
 	docker-build docker-up docker-logs docker-logs-ts docker-up-logs docker-down docker-restart docker-clean \
-	docker-wait-api docker-health docker-test-api docker-test
+	docker-wait-api docker-health docker-test-api docker-test \
+	docker-etl-up docker-etl-logs docker-etl-down
 
 help: ## Show this help
 	@echo "Available targets:" && \
@@ -186,6 +187,18 @@ docker-test: ## Bring up stack and run API health checks
 	$(MAKE) docker-health
 	$(MAKE) docker-test-api
 
+# -----------------------------
+# Docker: ETL-only compose (runs once)
+# -----------------------------
+.PHONY: docker-etl-up docker-etl-logs docker-etl-down
+docker-etl-up: ## Build and run only the daily ETL container once (exits when done)
+	$(DOCKER_COMPOSE) -f deploy/docker-compose.etl.yml up --build --abort-on-container-exit
+
+docker-etl-logs: ## Show logs from the ETL-only compose
+	$(DOCKER_COMPOSE) -f deploy/docker-compose.etl.yml logs --tail=200 -f
+
+docker-etl-down: ## Stop and remove the ETL-only compose
+	$(DOCKER_COMPOSE) -f deploy/docker-compose.etl.yml down
 # -----------------------------
 # Portainer/local stack test (prebuilt image)
 # -----------------------------

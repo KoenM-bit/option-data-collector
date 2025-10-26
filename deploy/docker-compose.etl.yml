@@ -1,0 +1,19 @@
+services:
+  daily-etl:
+    build: ..
+    container_name: daily-etl-once
+    environment:
+      - TZ=Europe/Amsterdam
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - DB_PORT=${DB_PORT-3306}
+    # Run the ETL once and exit (no infinite loop)
+    command: ["python", "-m", "app.etl.daily_etl"]
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
