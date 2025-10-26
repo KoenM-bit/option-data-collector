@@ -5,6 +5,10 @@ services:
   daily-etl-once:
     image: ghcr.io/koenm-bit/option-data-collector:latest
     container_name: daily-etl-once
+    # Explicit DNS to avoid resolver issues on Synology/Portainer
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - TZ=Europe/Amsterdam
       - DB_HOST=${DB_HOST}
@@ -20,3 +24,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # If DNS still fails, as a last resort you can use host networking (be mindful of port collisions)
+    # network_mode: host

@@ -6,6 +6,9 @@ services:
   api:
     image: ghcr.io/koenm-bit/option-data-collector:latest
     container_name: option-api
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - TZ=Europe/Amsterdam
       - DB_HOST=${DB_HOST}
@@ -31,6 +34,9 @@ services:
   scraper:
     image: ghcr.io/koenm-bit/option-data-collector:latest
     container_name: option-scraper
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - TZ=Europe/Amsterdam
       - DB_HOST=${DB_HOST}
@@ -49,6 +55,9 @@ services:
   sentiment:
     image: ghcr.io/koenm-bit/option-data-collector:latest
     container_name: sentiment-tracker
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - TZ=Europe/Amsterdam
       - DB_HOST=${DB_HOST}
@@ -67,6 +76,9 @@ services:
   daily-etl:
     image: ghcr.io/koenm-bit/option-data-collector:latest
     container_name: daily-etl
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - TZ=Europe/Amsterdam
       - DB_HOST=${DB_HOST}

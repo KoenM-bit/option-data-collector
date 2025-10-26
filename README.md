@@ -134,6 +134,7 @@ This uses `deploy/docker-compose.etl.yml`, which builds the image locally and ru
 
 Notes:
 - If your DB is on your LAN and Synology can’t reach it over the default bridge, consider enabling host networking in the Portainer stack by adding `network_mode: host` to the service. Ensure port 8080 is free when using host network.
+- If you see DNS errors like “Failed to resolve 'beurs.fd.nl'”, configure DNS in the stack (already included in `deploy/portainer-*.yml`), or set DNS in Portainer’s advanced container settings. As a last resort, use host networking.
 
 ## CI/CD and GHCR
 
