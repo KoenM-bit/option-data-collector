@@ -8,10 +8,12 @@ Geporteerd uit legacy beursduivel.py en aangepast voor app/ structuur.
 
 from __future__ import annotations
 
+import os
 import time
 import datetime as dt
 import pytz
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 
 from app.db import get_connection
@@ -21,6 +23,8 @@ from app.utils.helpers import clean_href, _parse_eu_number
 BASE = "https://www.beursduivel.be"
 URL = f"{BASE}/Aandeel-Koers/11755/Ahold-Delhaize-Koninklijke/opties-expiratiedatum.aspx"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+VERBOSE = os.getenv("BD_VERBOSE", "1") not in ("0", "false", "False")
+LOG_EVERY = int(os.getenv("BD_LOG_EVERY", "10"))
 
 TIMEZONE = pytz.timezone("Europe/Amsterdam")
 MARKET_OPEN = 9
@@ -32,14 +36,18 @@ def is_market_open() -> bool:
     return MARKET_OPEN <= now.hour < MARKET_CLOSE
 
 
-def fetch_option_chain():
-    r = requests.get(URL, headers=HEADERS, timeout=20)
+def fetch_option_chain(limit: int | None = None, timeout: int = 15):
+    if VERBOSE:
+        print(f"[scraper] Fetching option chain from Beursduivel (limit={limit or 'none'}, timeout={timeout}s)...")
+    r = requests.get(URL, headers=HEADERS, timeout=timeout)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     options = []
+    expiries = set()
     for section in soup.select("section.contentblock"):
         expiry_el = section.find("h3", class_="titlecontent")
         expiry_text = expiry_el.get_text(strip=True) if expiry_el else "Unknown Expiry"
+        expiries.add(expiry_text)
         for row in section.select("tr"):
             strike_cell = row.select_one(".optiontable__focus")
             strike = strike_cell.get_text(strip=True).split()[0] if strike_cell else None
@@ -79,11 +87,18 @@ def fetch_option_chain():
                         "ask": ask_val,
                     }
                 )
+                if limit and len(options) >= limit:
+                    if VERBOSE:
+                        print(f"[scraper] Limit reached early: {limit} options")
+                    return options
+    if VERBOSE:
+        print(f"[scraper] Option chain fetched: {len(options)} options across {len(expiries)} expiries")
     return options
 
 
-def get_live_price(issue_id: str, detail_url: str):
-    r = requests.get(detail_url, headers=HEADERS, timeout=20)
+def get_live_price(issue_id: str, detail_url: str, session: requests.Session | None = None, timeout: int = 10):
+    sess = session or requests
+    r = sess.get(detail_url, headers=HEADERS, timeout=timeout)
     if not r.ok:
         return None
     soup = BeautifulSoup(r.text, "html.parser")
@@ -129,14 +144,45 @@ def save_price_to_db(option, price, source):
     conn.close()
 
 
-def run_once():
-    options = fetch_option_chain()
+def run_once(limit: int | None = None, timeout: int = 10, workers: int = 6):
+    """
+    Fetch option chain (optionally limited) and fetch live prices in parallel to avoid long waits.
+    Limits and timeouts can be tuned; default keeps a quick run for tests.
+    """
+    # Allow override from env for convenience
+    if limit is None:
+        env_limit = os.getenv("BD_MAX_OPTIONS")
+        if env_limit and env_limit.isdigit():
+            limit = int(env_limit)
+
+    options = fetch_option_chain(limit=limit, timeout=max(timeout, 5))
+    if not options:
+        print("No options found.")
+        return
+
     count = 0
-    for o in options:
-        live = get_live_price(o["issue_id"], o["url"])
-        if live and live.get("last"):
-            save_price_to_db(o, live["last"], "LIVE")
-            count += 1
+    session = requests.Session()
+    total = len(options)
+    print(f"[scraper] Fetching live prices for {total} options using {workers} workers (timeout={timeout}s)...")
+    # light connection pool helps when fetching many details
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        future_map = {
+            pool.submit(get_live_price, o["issue_id"], o["url"], session, timeout): o
+            for o in options
+        }
+        for fut in as_completed(future_map):
+            o = future_map[fut]
+            try:
+                live = fut.result()
+            except Exception:
+                live = None
+            if live and live.get("last"):
+                save_price_to_db(o, live["last"], "LIVE")
+                count += 1
+                if VERBOSE:
+                    print(f"[saved] {o['type']} {o['expiry']} strike {o['strike']}: {live['last']}")
+                elif LOG_EVERY and count % LOG_EVERY == 0:
+                    print(f"[scraper] Saved {count}/{total} with live prices...")
     print(f"Stored {count} options.")
 
 
