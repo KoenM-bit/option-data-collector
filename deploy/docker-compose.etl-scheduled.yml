@@ -1,0 +1,54 @@
+services:
+  daily-etl:
+    image: ghcr.io/koenm-bit/option-data-collector:latest
+    container_name: daily-etl-scheduled
+    environment:
+      TZ: Europe/Amsterdam
+      ETL_TZ: ${ETL_TZ:-Europe/Amsterdam}
+      ETL_HOUR: ${ETL_HOUR:-22}
+      ETL_MINUTE: ${ETL_MINUTE:-0}
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: ${DB_NAME}
+      DB_PORT: ${DB_PORT:-3306}
+    # Run once at start, then daily at the configured hour/minute in ETL_TZ
+    command:
+      - sh
+      - -c
+      - |
+          set -e
+          echo "[etl] Running once on container start..."
+          python -m app.etl.daily_etl || true
+          while true; do
+            SECS=$$(python -c "import os,datetime as dt,pytz; tz=pytz.timezone(os.getenv('ETL_TZ', os.getenv('TZ','Europe/Amsterdam'))); h=int(os.getenv('ETL_HOUR','22')); m=int(os.getenv('ETL_MINUTE','0')); now=dt.datetime.now(tz); t=now.replace(hour=h, minute=m, second=0, microsecond=0); import datetime as _dt; print(int(((t if t>now else t+_dt.timedelta(days=1))-now).total_seconds()))") || SECS=""
+            # Fallback to hourly recheck if computation failed or returned non-numeric/empty
+            case "$$SECS" in
+              (''|*[!0-9]*)
+                SECS=3600
+                HOURLY=1
+                ;;
+              (*)
+                HOURLY=0
+                ;;
+            esac
+            # If more than an hour away, recheck hourly instead of busy waiting
+            if [ "$$HOURLY" -eq 1 ] || ([ "$$SECS" -gt 3600 ] 2>/dev/null); then
+              echo "[etl] Next run in ~$$SECSs (>1h or unknown); sleeping 3600s to recheck (TZ=$${ETL_TZ:-Europe/Amsterdam})"
+              sleep 3600
+              continue
+            fi
+            echo "[etl] Sleeping $$SECSs until next run at $${ETL_HOUR:-22}:$${ETL_MINUTE:-0} in $${ETL_TZ:-Europe/Amsterdam}"
+            sleep "$$SECS"
+            echo "[etl] Running scheduled daily ETL..."
+            python -m app.etl.daily_etl || true
+          done
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

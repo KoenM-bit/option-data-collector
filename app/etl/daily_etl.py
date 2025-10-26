@@ -17,7 +17,11 @@ from datetime import datetime
 
 from app.db import get_connection
 from app.etl.fd_overview_scraper import fetch_fd_overview, save_to_db
-from app.etl.fd_options_scraper import fetch_all_fd_options, save_to_database
+from app.etl.fd_options_scraper import (
+    fetch_all_fd_options,
+    save_to_database,
+    create_fd_option_contracts_table,
+)
 from app.compute.option_greeks import compute_greeks_for_day
 from app.compute.compute_option_score import compute_option_score
 
@@ -64,7 +68,9 @@ def run_etl(symbol_code: str = "AEX.AH/O", ticker: str = "AD.AS"):
 
     # Fetch & save option contracts
     try:
-        df = fetch_all_fd_options(symbol_code)
+        # Ensure table exists before inserting
+        create_fd_option_contracts_table()
+        df = fetch_all_fd_options(symbol_code, peildatum=peildatum)
         if not df.empty:
             save_to_database(df)
             print(f"{len(df)} optiecontracten opgeslagen.")

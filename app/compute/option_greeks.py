@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import math
 from datetime import datetime
+from typing import Optional
+import yfinance as yf
 from app.db import get_connection
 from app.utils.helpers import risk_free_rate_for_days
 
@@ -62,7 +64,7 @@ def implied_vol(price, S, K, t, r, call=True, tol=1e-6, max_iter=100):
     return float("nan")
 
 
-def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
+def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
     """Bereken en sla Greeks op voor alle opties van één dag.
     - Neemt mid price (bid/ask) als beschikbaar, anders last.
     - Risk-free rate via Euribor helpers.
@@ -71,9 +73,16 @@ def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
     cur = conn.cursor(dictionary=True)
     if not peildatum:
         cur.execute(
-            "SELECT MAX(peildatum) AS d FROM fd_option_contracts WHERE ticker=%s", (ticker,)
+            "SELECT MAX(peildatum) AS d FROM fd_option_contracts WHERE ticker=%s",
+            (ticker,),
         )
-        peildatum = cur.fetchone()["d"]
+        row = cur.fetchone()
+        peildatum = row["d"] if row else None
+    if not peildatum:
+        cur.close()
+        conn.close()
+        print(f"Geen contracten gevonden voor {ticker}; geen peildatum beschikbaar")
+        return
 
     cur.execute(
         """
@@ -83,13 +92,46 @@ def compute_greeks_for_day(ticker="AD.AS", peildatum=None):
         """,
         (ticker, peildatum),
     )
-    contracts = cur.fetchall()
+    contracts = cur.fetchall() or []
+    if not contracts:
+        cur.close()
+        conn.close()
+        print(f"Geen opties gevonden voor {ticker} op {peildatum}; niets te berekenen")
+        return
 
+    # Probeer spotprijs (S) uit overview, met fallbacks
+    S: Optional[float] = None
     cur.execute(
         "SELECT koers FROM fd_option_overview WHERE ticker=%s AND peildatum=%s LIMIT 1",
         (ticker, peildatum),
     )
-    S = cur.fetchone()["koers"]
+    row = cur.fetchone()
+    if row and row.get("koers"):
+        S = float(row["koers"])
+    if not S:
+        cur.execute(
+            "SELECT koers FROM fd_option_overview WHERE ticker=%s ORDER BY peildatum DESC LIMIT 1",
+            (ticker,),
+        )
+        row = cur.fetchone()
+        if row and row.get("koers"):
+            S = float(row["koers"])
+    if not S:
+        # Laatste redmiddel: yfinance slotkoers
+        try:
+            hist = yf.Ticker(ticker).history(period="5d")
+            close = hist["Close"] if "Close" in hist else None
+            if close is not None and not close.empty:
+                S = float(close.iloc[-1])
+        except Exception:
+            S = None
+    if not S or S <= 0:
+        cur.close()
+        conn.close()
+        print(
+            f"Geen geldige spotprijs gevonden voor {ticker} (peildatum {peildatum}); Greeks overgeslagen"
+        )
+        return
     cur.close()
 
     results = []

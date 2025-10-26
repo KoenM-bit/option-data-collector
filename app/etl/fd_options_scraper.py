@@ -8,7 +8,7 @@ Geporteerd vanuit legacy fd_option_contracts.py naar app/ structuur.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from bs4 import BeautifulSoup
 import pandas as pd
 
@@ -96,8 +96,8 @@ def fetch_fd_options(
     df["ticker"] = "AD.AS"
     df["symbol_code"] = symbol_code
     df["type"] = option_type.capitalize()
-    df["peildatum"] = (peildatum or datetime.utcnow().date()) - timedelta(days=1)
-    df["scraped_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    df["peildatum"] = peildatum
+    df["scraped_at"] = datetime.utcnow()
     df["source"] = base_url
     print(f"{len(df)} {option_type.upper()}-opties opgehaald.")
     return df
@@ -172,10 +172,10 @@ def save_to_database(df: pd.DataFrame):
     print(f"{len(df)} records opgeslagen/bijgewerkt in fd_option_contracts.")
 
 
-def fetch_all_fd_options(symbol_code: str = "AEX.AH/O") -> pd.DataFrame:
-    today = datetime.utcnow().date()
-    calls = fetch_fd_options(symbol_code, "call", peildatum=today)
-    puts = fetch_fd_options(symbol_code, "put", peildatum=today)
+def fetch_all_fd_options(symbol_code: str = "AEX.AH/O", peildatum=None) -> pd.DataFrame:
+    d = peildatum or datetime.utcnow().date()
+    calls = fetch_fd_options(symbol_code, "call", peildatum=d)
+    puts = fetch_fd_options(symbol_code, "put", peildatum=d)
     if calls.empty and puts.empty:
         print("Geen enkele data opgehaald.")
         return pd.DataFrame()
