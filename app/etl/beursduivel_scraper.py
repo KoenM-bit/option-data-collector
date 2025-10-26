@@ -38,7 +38,9 @@ def is_market_open() -> bool:
 
 def fetch_option_chain(limit: int | None = None, timeout: int = 15):
     if VERBOSE:
-        print(f"[scraper] Fetching option chain from Beursduivel (limit={limit or 'none'}, timeout={timeout}s)...")
+        print(
+            f"[scraper] Fetching option chain from Beursduivel (limit={limit or 'none'}, timeout={timeout}s)..."
+        )
     r = requests.get(URL, headers=HEADERS, timeout=timeout)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
@@ -92,11 +94,15 @@ def fetch_option_chain(limit: int | None = None, timeout: int = 15):
                         print(f"[scraper] Limit reached early: {limit} options")
                     return options
     if VERBOSE:
-        print(f"[scraper] Option chain fetched: {len(options)} options across {len(expiries)} expiries")
+        print(
+            f"[scraper] Option chain fetched: {len(options)} options across {len(expiries)} expiries"
+        )
     return options
 
 
-def get_live_price(issue_id: str, detail_url: str, session: requests.Session | None = None, timeout: int = 10):
+def get_live_price(
+    issue_id: str, detail_url: str, session: requests.Session | None = None, timeout: int = 10
+):
     sess = session or requests
     r = sess.get(detail_url, headers=HEADERS, timeout=timeout)
     if not r.ok:
@@ -163,7 +169,9 @@ def run_once(limit: int | None = None, timeout: int = 10, workers: int = 6):
     count = 0
     session = requests.Session()
     total = len(options)
-    print(f"[scraper] Fetching live prices for {total} options using {workers} workers (timeout={timeout}s)...")
+    print(
+        f"[scraper] Fetching live prices for {total} options using {workers} workers (timeout={timeout}s)..."
+    )
     # light connection pool helps when fetching many details
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         future_map = {
