@@ -120,6 +120,21 @@ For a quick end-to-end ETL test without other services, use the ETL-only compose
 
 This uses `deploy/docker-compose.etl.yml`, which builds the image locally and runs `python -m app.etl.daily_etl` a single time.
 
+### Synology/Portainer: ETL-only options
+
+- One-off run (recommended to verify DB connectivity):
+  - In Portainer, Stacks → Add stack
+  - Paste `deploy/portainer-etl-once.yml`
+  - Provide env vars (DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT)
+  - Deploy → the container runs once and exits with status
+
+- Daily loop (24h schedule inside the container):
+  - Use `deploy/portainer-stack.yml`, keep only the `daily-etl` service (or deploy whole stack)
+  - Command `daily-etl` will run the loop; logs show each daily run
+
+Notes:
+- If your DB is on your LAN and Synology can’t reach it over the default bridge, consider enabling host networking in the Portainer stack by adding `network_mode: host` to the service. Ensure port 8080 is free when using host network.
+
 ## CI/CD and GHCR
 
 On every push to `main`, GitHub Actions will:
