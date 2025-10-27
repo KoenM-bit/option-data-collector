@@ -21,7 +21,7 @@ ENV_EXPORT := set -a; [ -f .env ] && . ./.env; set +a;
 
 .PHONY: help venv install dev-install clean clean-venv fresh-start check-imports \
 	run-api run-etl run-sentiment run-scraper run-scraper-once test-greeks test-score test-all \
-	lint format format-check test test-smoke \
+	lint format format-check pre-commit-install pre-commit-run pre-commit-update quality test test-smoke \
 	docker-build docker-up docker-logs docker-logs-ts docker-up-logs docker-down docker-restart docker-clean \
 	docker-wait-api docker-health docker-test-api docker-test \
 	docker-etl-up docker-etl-logs docker-etl-down
@@ -115,6 +115,20 @@ format: dev-install ## Format with black (source + tests only)
 
 format-check: dev-install ## Check formatting (black --check)
 	$(VENV)/bin/black --check app tests
+
+pre-commit-install: dev-install ## Install pre-commit hooks
+	pre-commit install
+
+pre-commit-run: dev-install ## Run pre-commit on all files
+	pre-commit run --all-files
+
+pre-commit-update: dev-install ## Update pre-commit hooks to latest versions
+	pre-commit autoupdate
+
+quality: dev-install ## Run all quality checks (lint, format, test)
+	$(MAKE) lint
+	$(MAKE) format
+	$(MAKE) test
 
 test: dev-install ## Run pytest (all tests)
 	$(VENV)/bin/pytest -q

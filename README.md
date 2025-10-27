@@ -64,6 +64,35 @@ PORT=8080
 
 All run/test targets auto-load `.env`.
 
+## Code Quality & Pre-commit Hooks
+
+This project uses pre-commit hooks to automatically ensure code quality. Every time you commit, the following checks run automatically:
+- **Ruff**: Linting and auto-fixing common issues
+- **Black**: Code formatting
+- **Trailing whitespace** and **end-of-file** fixes
+- **YAML validation**
+- **Tests**: Ensures all tests pass before commit
+
+### Setup (one-time)
+```bash
+make pre-commit-install  # Install pre-commit hooks
+```
+
+### Manual quality checks
+```bash
+make quality           # Run lint + format + test
+make pre-commit-run    # Run all pre-commit hooks manually
+make lint             # Linting only
+make format           # Formatting only
+make test             # Tests only
+```
+
+### How it works
+- **Pre-commit hooks** run automatically on `git commit`
+- If issues are found, the commit is **blocked** and files are **auto-fixed**
+- Simply run `git add` and `git commit` again after auto-fixes
+- No more manual linting/formatting needed! 🎉
+
 ## Docker
 
 - Build image:
