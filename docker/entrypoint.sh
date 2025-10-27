@@ -25,7 +25,7 @@ case "$MODE" in
     exec python -m app.api.routes
     ;;
   scraper)
-    exec python -m app.etl.beursduivel_scraper
+    exec python -m app.etl.beursduivel_scraper --continuous
     ;;
   sentiment)
     exec sh -c 'while true; do python -m app.etl.sentiment_tracker; sleep 86400; done'
@@ -36,7 +36,7 @@ case "$MODE" in
   all|all-in-one)
     echo "[entrypoint] starting all services in one container"
     PID_API=$(log_prefix api -- python -m app.api.routes)
-    PID_SCRAPER=$(log_prefix scraper -- python -m app.etl.beursduivel_scraper)
+    PID_SCRAPER=$(log_prefix scraper -- python -m app.etl.beursduivel_scraper --continuous)
     PID_SENT=$(log_prefix sentiment -- sh -c 'while true; do python -m app.etl.sentiment_tracker; sleep 86400; done')
     PID_ETL=$(log_prefix daily-etl -- sh -c 'while true; do python -m app.etl.daily_etl; sleep 86400; done')
     PIDS="$PID_API $PID_SCRAPER $PID_SENT $PID_ETL"

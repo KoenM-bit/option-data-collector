@@ -86,8 +86,8 @@ run-etl: venv ## Run the daily ETL once
 run-sentiment: venv ## Fetch and store sentiment once
 	$(ENV_EXPORT) $(PYTHON) -m app.etl.sentiment_tracker
 
-run-scraper: venv ## Run the live Beursduivel scraper loop (Ctrl+C to stop)
-	$(ENV_EXPORT) $(PYTHON) -m app.etl.beursduivel_scraper
+run-scraper: venv ## Run the live Beursduivel scraper (15min intervals during market hours, Ctrl+C to stop)
+	$(ENV_EXPORT) $(PYTHON) -m app.etl.beursduivel_scraper --continuous
 
 run-scraper-once: venv ## Run a single Beursduivel scrape iteration
 	$(ENV_EXPORT) $(PYTHON) -c "from app.etl.beursduivel_scraper import run_once; run_once()"

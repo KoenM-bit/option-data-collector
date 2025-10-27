@@ -95,10 +95,14 @@ def _to_date(value):
 
 def is_market_open() -> bool:
     """
-    Controleer of de huidige tijd binnen beursuren (09:00–17:00 Amsterdam) valt.
+    Controleer of de huidige tijd binnen beursuren (09:00–17:00 Amsterdam, Ma-Vr) valt.
     """
     now = dt.datetime.now(TIMEZONE)
-    return MARKET_OPEN_HOUR <= now.hour < MARKET_CLOSE_HOUR
+    # Check if it's a weekday (Monday=0, Sunday=6)
+    is_weekday = now.weekday() < 5  # Monday=0 through Friday=4
+    # Check if it's during trading hours
+    is_trading_hours = MARKET_OPEN_HOUR <= now.hour < MARKET_CLOSE_HOUR
+    return is_weekday and is_trading_hours
 
 
 def wait_minutes(minutes: int):

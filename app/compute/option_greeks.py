@@ -47,6 +47,19 @@ def bs_vega(S, K, t, r, sigma):
     return S * phi(d1) * math.sqrt(t)
 
 
+def bs_theta(S, K, t, r, sigma, call=True):
+    d1, d2 = d1_d2(S, K, t, r, sigma)
+    if d1 is None or d2 is None:
+        return float("nan")
+    first_term = -(S * phi(d1) * sigma) / (2 * math.sqrt(t))
+    if call:
+        second_term = -r * K * math.exp(-r * t) * Phi(d2)
+        return first_term + second_term
+    else:
+        second_term = r * K * math.exp(-r * t) * Phi(-d2)
+        return first_term + second_term
+
+
 def implied_vol(price, S, K, t, r, call=True, tol=1e-6, max_iter=100):
     """Berekent implied volatility via Newton-Raphson."""
     sigma = 0.3
@@ -65,12 +78,11 @@ def implied_vol(price, S, K, t, r, call=True, tol=1e-6, max_iter=100):
 
 
 def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
-    """Bereken en sla Greeks op voor alle opties van één dag.
-    - Neemt mid price (bid/ask) als beschikbaar, anders last.
-    - Risk-free rate via Euribor helpers.
-    """
+    """Bereken en sla Greeks op voor alle opties van één dag."""
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
+
+    # Bepaal peildatum indien niet expliciet meegegeven
     if not peildatum:
         cur.execute(
             "SELECT MAX(peildatum) AS d FROM fd_option_contracts WHERE ticker=%s",
@@ -99,7 +111,7 @@ def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
         print(f"Geen opties gevonden voor {ticker} op {peildatum}; niets te berekenen")
         return
 
-    # Probeer spotprijs (S) uit overview, met fallbacks
+    # Spotprijs bepalen
     S: Optional[float] = None
     cur.execute(
         "SELECT koers FROM fd_option_overview WHERE ticker=%s AND peildatum=%s LIMIT 1",
@@ -117,12 +129,11 @@ def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
         if row and row.get("koers"):
             S = float(row["koers"])
     if not S:
-        # Laatste redmiddel: yfinance slotkoers
+        # Laatste redmiddel via yfinance
         try:
             hist = yf.Ticker(ticker).history(period="5d")
-            close = hist["Close"] if "Close" in hist else None
-            if close is not None and not close.empty:
-                S = float(close.iloc[-1])
+            if "Close" in hist and not hist["Close"].empty:
+                S = float(hist["Close"].iloc[-1])
         except Exception:
             S = None
     if not S or S <= 0:
@@ -134,9 +145,9 @@ def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
         return
     cur.close()
 
+    # Berekeningen uitvoeren
     results = []
     for c in contracts:
-        # prijs: mid(bid,ask) of last
         price = None
         if c.get("bid") and c.get("ask") and c["bid"] > 0 and c["ask"] > 0:
             price = 0.5 * (c["bid"] + c["ask"])
@@ -148,15 +159,17 @@ def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
         K = c["strike"]
         days = (c["expiry"] - peildatum).days
         t = max(days / 365.0, 0.001)
-        r = risk_free_rate_for_days(days)
+        rf = risk_free_rate_for_days(days)
         is_call = c["type"].lower() == "call"
 
-        sigma = implied_vol(price, S, K, t, r, is_call)
+        sigma = implied_vol(price, S, K, t, rf, is_call)
         if math.isnan(sigma):
             continue
-        delta = bs_delta(S, K, t, r, sigma, is_call)
-        gamma = bs_gamma(S, K, t, r, sigma)
-        vega = bs_vega(S, K, t, r, sigma)
+
+        delta = bs_delta(S, K, t, rf, sigma, is_call)
+        gamma = bs_gamma(S, K, t, rf, sigma)
+        vega = bs_vega(S, K, t, rf, sigma)
+        theta = bs_theta(S, K, t, rf, sigma, is_call)
 
         results.append(
             {
@@ -171,26 +184,33 @@ def compute_greeks_for_day(ticker: str = "AD.AS", peildatum=None):
                 "delta": delta,
                 "gamma": gamma,
                 "vega": vega,
+                "theta": theta,
                 "created_at": datetime.now(),
             }
         )
 
-    # Opslaan
+    # Opslaan in DB
     if results:
         cur = conn.cursor()
-        for r in results:
-            cur.execute(
-                """
-                INSERT INTO fd_option_greeks
-                  (contract_id, ticker, peildatum, expiry, strike, type, price, iv, delta, gamma, vega, created_at)
-                VALUES
-                  (%(contract_id)s,%(ticker)s,%(peildatum)s,%(expiry)s,%(strike)s,%(type)s,%(price)s,%(iv)s,%(delta)s,%(gamma)s,%(vega)s,%(created_at)s)
-                ON DUPLICATE KEY UPDATE
-                  price=VALUES(price), iv=VALUES(iv), delta=VALUES(delta),
-                  gamma=VALUES(gamma), vega=VALUES(vega), created_at=VALUES(created_at)
-                """,
-                r,
+        insert_query = """
+            INSERT INTO fd_option_greeks (
+                contract_id, ticker, peildatum, expiry, strike, type, price, iv, delta, gamma, vega, theta, created_at
             )
+            VALUES (
+                %(contract_id)s, %(ticker)s, %(peildatum)s, %(expiry)s, %(strike)s, %(type)s,
+                %(price)s, %(iv)s, %(delta)s, %(gamma)s, %(vega)s, %(theta)s, %(created_at)s
+            )
+            ON DUPLICATE KEY UPDATE
+                price = VALUES(price),
+                iv = VALUES(iv),
+                delta = VALUES(delta),
+                gamma = VALUES(gamma),
+                vega = VALUES(vega),
+                theta = VALUES(theta),
+                created_at = VALUES(created_at)
+        """
+        for r in results:
+            cur.execute(insert_query, r)
         conn.commit()
         cur.close()
 
