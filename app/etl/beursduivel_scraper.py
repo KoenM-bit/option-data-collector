@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 app/etl/beursduivel_scraper.py
-Scraper die ALLE AEX/AH opties ophaalt van Beursduivel (inclusief 'Meer opties'),
+Scraper die ALLE AEX/AH opties ophaalt van Beursduivel (incl. 'Meer opties'),
 Greeks berekent en opslaat in de tabel `option_prices_live`.
 """
 
@@ -29,48 +29,100 @@ VERBOSE = os.getenv("BD_VERBOSE", "0") == "1"
 
 
 # ------------------------
-# 🧩 BASIS SCRAPER FUNCTIES
+# 🧩 PARSER
 # ------------------------
 
-
 def parse_option_table(section_html: str, expiry_title: str):
-    """Parse 1 optie-tabel (calls & puts)."""
+    """Parse 1 optie-tabel (calls & puts) incl. sizes, last, volume & trades."""
+
+    def _subline_text(el):
+        if not el:
+            return None
+        sub = el.select_one(".optiontable--subline")
+        return sub.get_text(strip=True) if sub else None
+
+    def _subline_int(el):
+        txt = _subline_text(el)
+        if not txt:
+            return None
+        s = re.sub(r"[^\d]", "", txt)
+        return int(s) if s.isdigit() else None
+
+    def _main_number(el):
+        """Grote getal in de cel (prijs of trades)."""
+        if not el:
+            return None
+        txt = el.get_text(separator="|", strip=True).split("|")[0]
+        return _parse_eu_number(txt)
+
     soup = BeautifulSoup(section_html, "html.parser")
     options = []
+
     for row in soup.select("tr"):
         strike_cell = row.select_one(".optiontable__focus")
         if not strike_cell:
             continue
         strike = strike_cell.get_text(strip=True).split()[0]
 
-        bid_call = row.select_one(".optiontable__bidcall")
-        ask_call = row.select_one(".optiontable__askcall")
-        bid_put = row.select_one(".optiontable__bid")
-        ask_put = row.select_one(".optiontable__askput")
+        # Cellen voor Call
+        bid_call  = row.select_one(".optiontable__bidcall")
+        ask_call  = row.select_one(".optiontable__askcall")
+        last_call = row.select_one(".optiontable__pricecall")
+        vol_call  = row.select_one(".optiontable__volumecall")
 
-        for opt_type in ["Call", "Put"]:
-            link = row.select_one(f"a.optionlink.{opt_type}")
-            if not link or "href" not in link.attrs:
-                continue
-            issue_id = next((p for p in link["href"].split("/") if p.isdigit()), None)
-            bid_el, ask_el = (bid_call, ask_call) if opt_type == "Call" else (bid_put, ask_put)
-            bid_val = _parse_eu_number(bid_el.get_text(strip=True)) if bid_el else None
-            ask_val = _parse_eu_number(ask_el.get_text(strip=True)) if ask_el else None
-            options.append(
-                {
-                    "type": opt_type,
-                    "expiry": expiry_title,
-                    "strike": strike,
-                    "issue_id": issue_id,
-                    "bid": bid_val,
-                    "ask": ask_val,
-                }
-            )
+        # Cellen voor Put
+        bid_put   = row.select_one(".optiontable__bid")
+        ask_put   = row.select_one(".optiontable__askput")
+        # Soms 'priceput' of 'tradeput'
+        last_put  = row.select_one(".optiontable__priceput, .optiontable__tradeput")
+        vol_put   = row.select_one(".optiontable__volumeput")
+
+        # Links / issue_id
+        link_call = row.select_one("a.optionlink.Call")
+        link_put  = row.select_one("a.optionlink.Put")
+        issue_call = next((p for p in (link_call["href"].split("/") if link_call and "href" in link_call.attrs else []) if p.isdigit()), None)
+        issue_put  = next((p for p in (link_put["href"].split("/")  if link_put  and "href" in link_put.attrs  else []) if p.isdigit()), None)
+
+        # --- CALL ---
+        if link_call:
+            options.append({
+                "type": "Call",
+                "expiry": expiry_title,
+                "strike": strike,
+                "issue_id": issue_call,
+                "bid": _main_number(bid_call),
+                "ask": _main_number(ask_call),
+                "bid_size": _subline_int(bid_call),   # size onder bid
+                "ask_size": _subline_int(ask_call),   # size onder ask
+                "last_price": _main_number(last_call),
+                "last_time": _subline_text(last_call),  # "09:33"
+                # volume-kolom: groot getal = trades, subline = volume
+                "trades": int(_main_number(vol_call) or 0) if vol_call else None,
+                "volume": _subline_int(vol_call),
+            })
+
+        # --- PUT ---
+        if link_put:
+            options.append({
+                "type": "Put",
+                "expiry": expiry_title,
+                "strike": strike,
+                "issue_id": issue_put,
+                "bid": _main_number(bid_put),
+                "ask": _main_number(ask_put),
+                "bid_size": _subline_int(bid_put),
+                "ask_size": _subline_int(ask_put),
+                "last_price": _main_number(last_put),
+                "last_time": _subline_text(last_put),   # "10:18"
+                "trades": int(_main_number(vol_put) or 0) if vol_put else None,
+                "volume": _subline_int(vol_put),
+            })
+
     return options
 
 
 def fetch_option_chain(timeout=10):
-    """Haalt alle AH-expiraties op (inclusief de 'Meer opties' via POST)."""
+    """Haalt alle AH-expiraties op (incl. 'Meer opties' via POST)."""
     print("[scraper] Fetching option chain from Beursduivel...")
     r = requests.get(MAIN_URL, headers=HEADERS, timeout=timeout)
     r.raise_for_status()
@@ -99,15 +151,11 @@ def fetch_option_chain(timeout=10):
         partial = parse_option_table(str(section), expiry_title)
         all_options.extend(partial)
 
-        # Simuleer 'Meer opties' klik via POST
+        # 'Meer opties' via POST simuleren
         more_link = section.find("a", class_="morelink")
         if more_link and "id" in more_link.attrs:
             event_target = more_link["id"].replace("_", "$")
-            payload = {
-                "__EVENTTARGET": event_target,
-                "__EVENTARGUMENT": "",
-                **hidden_fields,
-            }
+            payload = {"__EVENTTARGET": event_target, "__EVENTARGUMENT": "", **hidden_fields}
             try:
                 r2 = requests.post(MAIN_URL, headers=HEADERS, data=payload, timeout=timeout)
                 r2.raise_for_status()
@@ -123,12 +171,11 @@ def fetch_option_chain(timeout=10):
 
 
 # ------------------------
-# 💾 DATABASE OPSLAG
+# 💾 DATABASE
 # ------------------------
 
-
 def cleanup_old_records(days_to_keep=30):
-    """Clean up records older than specified days to prevent database bloat."""
+    """Verwijder oude records om de DB slank te houden."""
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -136,95 +183,117 @@ def cleanup_old_records(days_to_keep=30):
             """
             DELETE FROM option_prices_live 
             WHERE created_at < DATE_SUB(NOW(), INTERVAL %s DAY)
-        """,
+            """,
             (days_to_keep,),
         )
-        deleted_count = cur.rowcount
+        deleted = cur.rowcount
         conn.commit()
-        cur.close()
-        conn.close()
-        if deleted_count > 0:
-            print(f"🧹 Cleaned up {deleted_count} records older than {days_to_keep} days.")
-        return deleted_count
+        cur.close(); conn.close()
+        if deleted > 0:
+            print(f"🧹 Cleaned up {deleted} records older than {days_to_keep} days.")
+        return deleted
     except Exception as e:
         print(f"⚠️ Error during cleanup: {e}")
         return 0
 
 
 def ensure_option_prices_live_table():
-    """Maak de tabel option_prices_live aan als deze nog niet bestaat."""
-    print("[table] Connecting to database to create table...")
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        print("[table] Executing CREATE TABLE IF NOT EXISTS...")
-        # Check if table exists and has old unique constraint
-        cur.execute("SHOW TABLES LIKE 'option_prices_live'")
-        table_exists = cur.fetchone()
+    """Maak/upgrade de tabel `option_prices_live`."""
+    print("[table] Connecting to database to verify/create table...")
+    conn = get_connection()
+    cur = conn.cursor()
 
-        if table_exists:
-            # Check if the old unique constraint exists
+    # Bestaat de tabel?
+    cur.execute("SHOW TABLES LIKE 'option_prices_live'")
+    exists = cur.fetchone()
+
+    if not exists:
+        print("[table] Creating fresh table with full schema...")
+        cur.execute(
+            """
+            CREATE TABLE option_prices_live (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticker VARCHAR(20) DEFAULT 'AD.AS',
+                issue_id VARCHAR(32) NULL,
+                type ENUM('Call','Put') NOT NULL,
+                expiry VARCHAR(50) NOT NULL,
+                strike DECIMAL(10,3) NOT NULL,
+
+                -- quotes
+                price DECIMAL(10,4),
+                bid DECIMAL(10,4),
+                ask DECIMAL(10,4),
+                bid_size INT NULL,
+                ask_size INT NULL,
+                last_price DECIMAL(10,4) NULL,
+                last_time DATETIME NULL,
+                trades INT NULL,
+                volume INT NULL,
+
+                -- greeks
+                iv DECIMAL(10,6),
+                delta DECIMAL(10,6),
+                gamma DECIMAL(10,6),
+                vega DECIMAL(10,6),
+                theta DECIMAL(10,6),
+
+                spot_price DECIMAL(10,4) NULL,
+                fetched_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                INDEX idx_option_time (ticker, type, expiry, strike, created_at),
+                INDEX idx_issue_time (issue_id, created_at),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """
+        )
+    else:
+        # Oudere installs upgraden met ontbrekende kolommen/indexen
+        print("[table] Upgrading table schema if needed...")
+        alters = [
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS issue_id VARCHAR(32) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS bid_size INT NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS ask_size INT NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS last_price DECIMAL(10,4) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS last_time DATETIME NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS trades INT NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS volume INT NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS spot_price DECIMAL(10,4) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS fetched_at DATETIME NULL",
+            "ALTER TABLE option_prices_live ADD INDEX IF NOT EXISTS idx_option_time (ticker, type, expiry, strike, created_at)",
+            "ALTER TABLE option_prices_live ADD INDEX IF NOT EXISTS idx_issue_time (issue_id, created_at)",
+            "ALTER TABLE option_prices_live ADD INDEX IF NOT EXISTS idx_created_at (created_at)",
+        ]
+        for stmt in alters:
+            try:
+                cur.execute(stmt)
+            except Exception:
+                pass
+
+        # Verwijder evt. oude unieke index op (ticker,type,expiry,strike)
+        try:
             cur.execute(
                 """
                 SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS 
-                WHERE TABLE_NAME='option_prices_live' 
-                AND CONSTRAINT_NAME='unique_option' 
-                AND TABLE_SCHEMA=DATABASE()
-            """
-            )
-            has_old_constraint = cur.fetchone()[0] > 0
-
-            if has_old_constraint:
-                print("[table] Dropping old unique constraint to enable historical records...")
-                cur.execute("ALTER TABLE option_prices_live DROP INDEX unique_option")
-
-                # Add new indexes if they don't exist
-                try:
-                    cur.execute(
-                        "ALTER TABLE option_prices_live ADD INDEX idx_option_time (ticker, type, expiry, strike, created_at)"
-                    )
-                except:
-                    pass  # Index might already exist
-                try:
-                    cur.execute(
-                        "ALTER TABLE option_prices_live ADD INDEX idx_created_at (created_at)"
-                    )
-                except:
-                    pass  # Index might already exist
-        else:
-            # Create new table with proper schema
-            cur.execute(
+                WHERE TABLE_NAME='option_prices_live'
+                  AND CONSTRAINT_TYPE='UNIQUE'
+                  AND CONSTRAINT_NAME='unique_option'
+                  AND TABLE_SCHEMA=DATABASE()
                 """
-                CREATE TABLE option_prices_live (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    ticker VARCHAR(20) DEFAULT 'AD.AS',
-                    type ENUM('Call', 'Put') NOT NULL,
-                    expiry VARCHAR(50) NOT NULL,
-                    strike DECIMAL(10,3) NOT NULL,
-                    price DECIMAL(10,4),
-                    bid DECIMAL(10,4),
-                    ask DECIMAL(10,4),
-                    iv DECIMAL(10,6),
-                    delta DECIMAL(10,6),
-                    gamma DECIMAL(10,6),
-                    vega DECIMAL(10,6),
-                    theta DECIMAL(10,6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_option_time (ticker, type, expiry, strike, created_at),
-                    INDEX idx_created_at (created_at)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            """
             )
-        print("[table] Committing table creation...")
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("✅ Table 'option_prices_live' verified or created.")
-    except Exception as e:
-        print(f"❌ Database connection or table creation failed: {e}")
-        raise
+            if cur.fetchone()[0] > 0:
+                print("[table] Dropping legacy UNIQUE index unique_option...")
+                cur.execute("ALTER TABLE option_prices_live DROP INDEX unique_option")
+        except Exception:
+            pass
+
+    conn.commit()
+    cur.close(); conn.close()
+    print("✅ Table 'option_prices_live' verified/created.")
 
 
+# (Historische) upsert-helper wordt niet gebruikt in deze live variant,
+# laten we hem laten staan voor compatibiliteit maar niet aanroepen.
 def save_option_prices_live(options, spot_price):
     conn = get_connection()
     cur = conn.cursor()
@@ -237,45 +306,44 @@ def save_option_prices_live(options, spot_price):
             %(iv)s, %(delta)s, %(gamma)s, %(vega)s, %(theta)s, %(spot_price)s, %(fetched_at)s
         )
         ON DUPLICATE KEY UPDATE
-            bid=VALUES(bid),
-            ask=VALUES(ask),
-            price=VALUES(price),
-            iv=VALUES(iv),
-            delta=VALUES(delta),
-            gamma=VALUES(gamma),
-            vega=VALUES(vega),
-            theta=VALUES(theta),
-            spot_price=VALUES(spot_price),
-            fetched_at=VALUES(fetched_at);
+            bid=VALUES(bid), ask=VALUES(ask), price=VALUES(price),
+            iv=VALUES(iv), delta=VALUES(delta), gamma=VALUES(gamma),
+            vega=VALUES(vega), theta=VALUES(theta),
+            spot_price=VALUES(spot_price), fetched_at=VALUES(fetched_at)
     """
     for o in options:
         cur.execute(insert_query, o)
     conn.commit()
-    cur.close()
-    conn.close()
+    cur.close(); conn.close()
     print(f"[db] Saved/updated {len(options)} records in option_prices_live.")
 
 
 # ------------------------
-# ⚙️ LIVE GREEKS BEREKENING
+# ⚙️ GREEKS + INSERT
 # ------------------------
 
-
 def compute_and_store_live_greeks(options, spot_price):
-    """Bereken Greeks en sla op in DB."""
-    from datetime import datetime
-
+    """Bereken Greeks en sla volledige snapshot op."""
     print(f"[greeks] Starting Greeks calculation for {len(options)} options...")
-    print("[greeks] Creating table if needed...")
     ensure_option_prices_live_table()
-    print("[greeks] Connecting to database...")
     conn = get_connection()
     cur = conn.cursor()
-    print("[greeks] Database connection established.")
 
     today = date.today()
-    results = []
+    rows = []
     processed = 0
+
+    # helper: parse HH:MM -> DATETIME (vandaag)
+    def _dt_from_hhmm(hhmm: str):
+        if not hhmm or not re.match(r"^\d{2}:\d{2}$", hhmm):
+            return None
+        hh, mm = map(int, hhmm.split(":"))
+        return datetime(today.year, today.month, today.day, hh, mm, 0)
+
+    month_map = {
+        "Januari": 1, "Februari": 2, "Maart": 3, "April": 4, "Mei": 5, "Juni": 6,
+        "Juli": 7, "Augustus": 8, "September": 9, "Oktober": 10, "November": 11, "December": 12,
+    }
 
     for o in options:
         processed += 1
@@ -283,27 +351,14 @@ def compute_and_store_live_greeks(options, spot_price):
             print(f"[greeks] Processed {processed}/{len(options)} options...")
 
         bid, ask = o.get("bid"), o.get("ask")
-        if not bid or not ask or bid <= 0 or ask <= 0:
+        if not bid or not ask or bid is None or ask is None or bid <= 0 or ask <= 0:
             continue
 
         price = 0.5 * (bid + ask)
         expiry_text = o["expiry"].split("(")[0].strip()
 
+        # ruw: gebruik 15e vd maand als expiry-dag (zoals eerder)
         try:
-            month_map = {
-                "Januari": 1,
-                "Februari": 2,
-                "Maart": 3,
-                "April": 4,
-                "Mei": 5,
-                "Juni": 6,
-                "Juli": 7,
-                "Augustus": 8,
-                "September": 9,
-                "Oktober": 10,
-                "November": 11,
-                "December": 12,
-            }
             parts = expiry_text.split()
             if len(parts) < 2:
                 continue
@@ -327,7 +382,6 @@ def compute_and_store_live_greeks(options, spot_price):
             K = float(str(o["strike"]).replace(",", "."))
         except (ValueError, TypeError):
             continue
-
         if K <= 0 or spot_price <= 0:
             continue
 
@@ -338,51 +392,73 @@ def compute_and_store_live_greeks(options, spot_price):
 
             delta = bs_delta(spot_price, K, t, r, sigma, is_call)
             gamma = bs_gamma(spot_price, K, t, r, sigma)
-            vega = bs_vega(spot_price, K, t, r, sigma)
+            vega  = bs_vega(spot_price, K, t, r, sigma)
             theta = bs_theta(spot_price, K, t, r, sigma, is_call)
 
-            results.append(
-                (o["type"], expiry_text, K, price, bid, ask, sigma, delta, gamma, vega, theta)
-            )
+            rows.append({
+                "ticker": "AD.AS",
+                "issue_id": o.get("issue_id"),
+                "type": o["type"],
+                "expiry": expiry_text,
+                "strike": K,
+
+                "price": price,
+                "bid": bid,
+                "ask": ask,
+                "bid_size": o.get("bid_size"),
+                "ask_size": o.get("ask_size"),
+                "last_price": o.get("last_price"),
+                "last_time": _dt_from_hhmm(o.get("last_time")),
+                "trades": o.get("trades"),
+                "volume": o.get("volume"),
+
+                "iv": sigma,
+                "delta": delta,
+                "gamma": gamma,
+                "vega": vega,
+                "theta": theta,
+
+                "spot_price": float(spot_price),
+                "fetched_at": datetime.now(),
+                "created_at": datetime.now(),
+            })
         except Exception as e:
             if VERBOSE:
                 print(f"[greeks] Error calculating Greeks for {o['type']} {K} {expiry_text}: {e}")
             continue
 
-    print(
-        f"[greeks] Calculated Greeks for {len(results)} valid options out of {len(options)} total."
-    )
+    print(f"[greeks] Calculated + prepared {len(rows)} rows for insert.")
 
-    if results:
-        insert_query = """
+    if rows:
+        insert_sql = """
             INSERT INTO option_prices_live
-                (type, expiry, strike, price, bid, ask, iv, delta, gamma, vega, theta, created_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            (ticker, issue_id, type, expiry, strike,
+             price, bid, ask, bid_size, ask_size,
+             last_price, last_time, trades, volume,
+             iv, delta, gamma, vega, theta,
+             spot_price, fetched_at, created_at)
+            VALUES
+            (%(ticker)s, %(issue_id)s, %(type)s, %(expiry)s, %(strike)s,
+             %(price)s, %(bid)s, %(ask)s, %(bid_size)s, %(ask_size)s,
+             %(last_price)s, %(last_time)s, %(trades)s, %(volume)s,
+             %(iv)s, %(delta)s, %(gamma)s, %(vega)s, %(theta)s,
+             %(spot_price)s, %(fetched_at)s, %(created_at)s)
         """
-        # Add timestamp to each result
-        timestamped_results = []
-        current_time = datetime.now()
-        for result in results:
-            timestamped_results.append(result + (current_time,))
-
-        cur.executemany(insert_query, timestamped_results)
+        cur.executemany(insert_sql, rows)
         conn.commit()
-        print(
-            f"✅ {len(results)} historical records inserted into option_prices_live at {current_time.strftime('%H:%M:%S')}."
-        )
+        print(f"✅ {len(rows)} historical records inserted into option_prices_live.")
     else:
         print("⚠️ No valid options to store.")
-    cur.close()
-    conn.close()
+
+    cur.close(); conn.close()
 
 
 # ------------------------
-# 🚀 ENTRYPOINT
+# 🚀 ENTRYPOINTS
 # ------------------------
-
 
 def run_once():
-    """Run the scraper once (for testing or one-off execution)."""
+    """Run de scraper één keer."""
     if not is_market_open():
         print("[scraper] ⏰ Market is closed (outside 9:00-17:00 CET, Mon-Fri). Skipping scrape.")
         return
@@ -394,35 +470,29 @@ def run_once():
         return
 
     print(f"[scraper] Fetched {len(options)} options. Starting Greeks calculation...")
-    spot_price = 36.84  # voorbeeld — je kunt later live fetchen met yfinance
-
+    spot_price = 36.84  # TODO: later live spot fetchen
     try:
         compute_and_store_live_greeks(options, spot_price)
         print("[scraper] ✅ Complete!")
     except Exception as e:
         print(f"[scraper] ❌ Failed to store Greeks in database: {e}")
         print(f"[scraper] Successfully fetched {len(options)} options, but could not store to DB.")
-        # For debugging, show first few options
         print("[scraper] Sample options fetched:")
         for i, opt in enumerate(options[:5]):
-            print(
-                f"  {i+1}. {opt['type']} {opt['strike']} {opt['expiry']} - bid:{opt.get('bid')} ask:{opt.get('ask')}"
-            )
+            print(f"  {i+1}. {opt['type']} {opt['strike']} {opt['expiry']} - bid:{opt.get('bid')} ask:{opt.get('ask')}")
         if len(options) > 5:
             print(f"  ... and {len(options)-5} more options")
 
 
 def run_continuous():
-    """Run the scraper continuously every 15 minutes during market hours."""
+    """Run elke 15 min tijdens beursuren (met dagelijkse cleanup)."""
     print("[scraper] 🚀 Starting continuous live scraper (15min intervals during market hours)")
     print("[scraper] Market hours: 9:00-17:00 CET, Monday-Friday")
     print("[scraper] 📊 Historical mode: Every scrape creates a new timestamped record")
 
     last_cleanup_date = None
-
     while True:
         try:
-            # Daily cleanup check (run once per day)
             today = datetime.now().date()
             if last_cleanup_date != today:
                 print("[scraper] 🧹 Running daily cleanup...")
@@ -430,19 +500,14 @@ def run_continuous():
                 last_cleanup_date = today
 
             if is_market_open():
-                print(
-                    f"[scraper] 📈 Market is open - running scrape at {datetime.now().strftime('%H:%M:%S')}"
-                )
+                print(f"[scraper] 📈 Market is open - running scrape at {datetime.now().strftime('%H:%M:%S')}")
                 run_once()
                 print("[scraper] ⏳ Waiting 15 minutes until next scrape...")
                 wait_minutes(15)
             else:
                 import pytz
-
                 now = datetime.now(pytz.timezone("Europe/Amsterdam"))
-                print(
-                    f"[scraper] 😴 Market closed ({now.strftime('%a %H:%M')}). Checking again in 30 minutes..."
-                )
+                print(f"[scraper] 😴 Market closed ({now.strftime('%a %H:%M')}). Checking again in 30 minutes...")
                 wait_minutes(30)
         except KeyboardInterrupt:
             print("\n[scraper] 🛑 Scraper stopped by user")
@@ -455,7 +520,6 @@ def run_continuous():
 
 if __name__ == "__main__":
     import sys
-
     if len(sys.argv) > 1 and sys.argv[1] == "--continuous":
         run_continuous()
     else:
