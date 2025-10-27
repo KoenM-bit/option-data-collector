@@ -32,6 +32,7 @@ VERBOSE = os.getenv("BD_VERBOSE", "0") == "1"
 # 🧩 PARSER
 # ------------------------
 
+
 def parse_option_table(section_html: str, expiry_title: str):
     """Parse 1 optie-tabel (calls & puts) incl. sizes, last, volume & trades."""
 
@@ -65,58 +66,80 @@ def parse_option_table(section_html: str, expiry_title: str):
         strike = strike_cell.get_text(strip=True).split()[0]
 
         # Cellen voor Call
-        bid_call  = row.select_one(".optiontable__bidcall")
-        ask_call  = row.select_one(".optiontable__askcall")
+        bid_call = row.select_one(".optiontable__bidcall")
+        ask_call = row.select_one(".optiontable__askcall")
         last_call = row.select_one(".optiontable__pricecall")
-        vol_call  = row.select_one(".optiontable__volumecall")
+        vol_call = row.select_one(".optiontable__volumecall")
 
         # Cellen voor Put
-        bid_put   = row.select_one(".optiontable__bid")
-        ask_put   = row.select_one(".optiontable__askput")
+        bid_put = row.select_one(".optiontable__bid")
+        ask_put = row.select_one(".optiontable__askput")
         # Soms 'priceput' of 'tradeput'
-        last_put  = row.select_one(".optiontable__priceput, .optiontable__tradeput")
-        vol_put   = row.select_one(".optiontable__volumeput")
+        last_put = row.select_one(".optiontable__priceput, .optiontable__tradeput")
+        vol_put = row.select_one(".optiontable__volumeput")
 
         # Links / issue_id
         link_call = row.select_one("a.optionlink.Call")
-        link_put  = row.select_one("a.optionlink.Put")
-        issue_call = next((p for p in (link_call["href"].split("/") if link_call and "href" in link_call.attrs else []) if p.isdigit()), None)
-        issue_put  = next((p for p in (link_put["href"].split("/")  if link_put  and "href" in link_put.attrs  else []) if p.isdigit()), None)
+        link_put = row.select_one("a.optionlink.Put")
+        issue_call = next(
+            (
+                p
+                for p in (
+                    link_call["href"].split("/") if link_call and "href" in link_call.attrs else []
+                )
+                if p.isdigit()
+            ),
+            None,
+        )
+        issue_put = next(
+            (
+                p
+                for p in (
+                    link_put["href"].split("/") if link_put and "href" in link_put.attrs else []
+                )
+                if p.isdigit()
+            ),
+            None,
+        )
 
         # --- CALL ---
         if link_call:
-            options.append({
-                "type": "Call",
-                "expiry": expiry_title,
-                "strike": strike,
-                "issue_id": issue_call,
-                "bid": _main_number(bid_call),
-                "ask": _main_number(ask_call),
-                "bid_size": _subline_int(bid_call),   # size onder bid
-                "ask_size": _subline_int(ask_call),   # size onder ask
-                "last_price": _main_number(last_call),
-                "last_time": _subline_text(last_call),  # "09:33"
-                # volume-kolom: groot getal = trades, subline = volume
-                "trades": int(_main_number(vol_call) or 0) if vol_call else None,
-                "volume": _subline_int(vol_call),
-            })
+            options.append(
+                {
+                    "type": "Call",
+                    "expiry": expiry_title,
+                    "strike": strike,
+                    "issue_id": issue_call,
+                    "bid": _main_number(bid_call),
+                    "ask": _main_number(ask_call),
+                    "bid_size": _subline_int(bid_call),  # size onder bid
+                    "ask_size": _subline_int(ask_call),  # size onder ask
+                    "last_price": _main_number(last_call),
+                    "last_time": _subline_text(last_call),  # "09:33"
+                    # volume-kolom: groot getal = trades, subline = volume
+                    "trades": int(_main_number(vol_call) or 0) if vol_call else None,
+                    "volume": _subline_int(vol_call),
+                }
+            )
 
         # --- PUT ---
         if link_put:
-            options.append({
-                "type": "Put",
-                "expiry": expiry_title,
-                "strike": strike,
-                "issue_id": issue_put,
-                "bid": _main_number(bid_put),
-                "ask": _main_number(ask_put),
-                "bid_size": _subline_int(bid_put),
-                "ask_size": _subline_int(ask_put),
-                "last_price": _main_number(last_put),
-                "last_time": _subline_text(last_put),   # "10:18"
-                "trades": int(_main_number(vol_put) or 0) if vol_put else None,
-                "volume": _subline_int(vol_put),
-            })
+            options.append(
+                {
+                    "type": "Put",
+                    "expiry": expiry_title,
+                    "strike": strike,
+                    "issue_id": issue_put,
+                    "bid": _main_number(bid_put),
+                    "ask": _main_number(ask_put),
+                    "bid_size": _subline_int(bid_put),
+                    "ask_size": _subline_int(ask_put),
+                    "last_price": _main_number(last_put),
+                    "last_time": _subline_text(last_put),  # "10:18"
+                    "trades": int(_main_number(vol_put) or 0) if vol_put else None,
+                    "volume": _subline_int(vol_put),
+                }
+            )
 
     return options
 
@@ -174,6 +197,7 @@ def fetch_option_chain(timeout=10):
 # 💾 DATABASE
 # ------------------------
 
+
 def cleanup_old_records(days_to_keep=30):
     """Verwijder oude records om de DB slank te houden."""
     try:
@@ -188,7 +212,8 @@ def cleanup_old_records(days_to_keep=30):
         )
         deleted = cur.rowcount
         conn.commit()
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
         if deleted > 0:
             print(f"🧹 Cleaned up {deleted} records older than {days_to_keep} days.")
         return deleted
@@ -288,7 +313,8 @@ def ensure_option_prices_live_table():
             pass
 
     conn.commit()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     print("✅ Table 'option_prices_live' verified/created.")
 
 
@@ -314,13 +340,15 @@ def save_option_prices_live(options, spot_price):
     for o in options:
         cur.execute(insert_query, o)
     conn.commit()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     print(f"[db] Saved/updated {len(options)} records in option_prices_live.")
 
 
 # ------------------------
 # ⚙️ GREEKS + INSERT
 # ------------------------
+
 
 def compute_and_store_live_greeks(options, spot_price):
     """Bereken Greeks en sla volledige snapshot op."""
@@ -341,8 +369,18 @@ def compute_and_store_live_greeks(options, spot_price):
         return datetime(today.year, today.month, today.day, hh, mm, 0)
 
     month_map = {
-        "Januari": 1, "Februari": 2, "Maart": 3, "April": 4, "Mei": 5, "Juni": 6,
-        "Juli": 7, "Augustus": 8, "September": 9, "Oktober": 10, "November": 11, "December": 12,
+        "Januari": 1,
+        "Februari": 2,
+        "Maart": 3,
+        "April": 4,
+        "Mei": 5,
+        "Juni": 6,
+        "Juli": 7,
+        "Augustus": 8,
+        "September": 9,
+        "Oktober": 10,
+        "November": 11,
+        "December": 12,
     }
 
     for o in options:
@@ -392,36 +430,35 @@ def compute_and_store_live_greeks(options, spot_price):
 
             delta = bs_delta(spot_price, K, t, r, sigma, is_call)
             gamma = bs_gamma(spot_price, K, t, r, sigma)
-            vega  = bs_vega(spot_price, K, t, r, sigma)
+            vega = bs_vega(spot_price, K, t, r, sigma)
             theta = bs_theta(spot_price, K, t, r, sigma, is_call)
 
-            rows.append({
-                "ticker": "AD.AS",
-                "issue_id": o.get("issue_id"),
-                "type": o["type"],
-                "expiry": expiry_text,
-                "strike": K,
-
-                "price": price,
-                "bid": bid,
-                "ask": ask,
-                "bid_size": o.get("bid_size"),
-                "ask_size": o.get("ask_size"),
-                "last_price": o.get("last_price"),
-                "last_time": _dt_from_hhmm(o.get("last_time")),
-                "trades": o.get("trades"),
-                "volume": o.get("volume"),
-
-                "iv": sigma,
-                "delta": delta,
-                "gamma": gamma,
-                "vega": vega,
-                "theta": theta,
-
-                "spot_price": float(spot_price),
-                "fetched_at": datetime.now(),
-                "created_at": datetime.now(),
-            })
+            rows.append(
+                {
+                    "ticker": "AD.AS",
+                    "issue_id": o.get("issue_id"),
+                    "type": o["type"],
+                    "expiry": expiry_text,
+                    "strike": K,
+                    "price": price,
+                    "bid": bid,
+                    "ask": ask,
+                    "bid_size": o.get("bid_size"),
+                    "ask_size": o.get("ask_size"),
+                    "last_price": o.get("last_price"),
+                    "last_time": _dt_from_hhmm(o.get("last_time")),
+                    "trades": o.get("trades"),
+                    "volume": o.get("volume"),
+                    "iv": sigma,
+                    "delta": delta,
+                    "gamma": gamma,
+                    "vega": vega,
+                    "theta": theta,
+                    "spot_price": float(spot_price),
+                    "fetched_at": datetime.now(),
+                    "created_at": datetime.now(),
+                }
+            )
         except Exception as e:
             if VERBOSE:
                 print(f"[greeks] Error calculating Greeks for {o['type']} {K} {expiry_text}: {e}")
@@ -450,12 +487,14 @@ def compute_and_store_live_greeks(options, spot_price):
     else:
         print("⚠️ No valid options to store.")
 
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
 
 
 # ------------------------
 # 🚀 ENTRYPOINTS
 # ------------------------
+
 
 def run_once():
     """Run de scraper één keer."""
@@ -479,7 +518,9 @@ def run_once():
         print(f"[scraper] Successfully fetched {len(options)} options, but could not store to DB.")
         print("[scraper] Sample options fetched:")
         for i, opt in enumerate(options[:5]):
-            print(f"  {i+1}. {opt['type']} {opt['strike']} {opt['expiry']} - bid:{opt.get('bid')} ask:{opt.get('ask')}")
+            print(
+                f"  {i+1}. {opt['type']} {opt['strike']} {opt['expiry']} - bid:{opt.get('bid')} ask:{opt.get('ask')}"
+            )
         if len(options) > 5:
             print(f"  ... and {len(options)-5} more options")
 
@@ -500,14 +541,19 @@ def run_continuous():
                 last_cleanup_date = today
 
             if is_market_open():
-                print(f"[scraper] 📈 Market is open - running scrape at {datetime.now().strftime('%H:%M:%S')}")
+                print(
+                    f"[scraper] 📈 Market is open - running scrape at {datetime.now().strftime('%H:%M:%S')}"
+                )
                 run_once()
                 print("[scraper] ⏳ Waiting 15 minutes until next scrape...")
                 wait_minutes(15)
             else:
                 import pytz
+
                 now = datetime.now(pytz.timezone("Europe/Amsterdam"))
-                print(f"[scraper] 😴 Market closed ({now.strftime('%a %H:%M')}). Checking again in 30 minutes...")
+                print(
+                    f"[scraper] 😴 Market closed ({now.strftime('%a %H:%M')}). Checking again in 30 minutes..."
+                )
                 wait_minutes(30)
         except KeyboardInterrupt:
             print("\n[scraper] 🛑 Scraper stopped by user")
@@ -520,6 +566,7 @@ def run_continuous():
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) > 1 and sys.argv[1] == "--continuous":
         run_continuous()
     else:
