@@ -614,7 +614,7 @@ def run_once():
     """Run de scraper één keer."""
     if not is_market_open():
         print(
-            "[scraper] ⏰ Market is closed (outside 9:00-17:00 CET, Mon-Fri). Skipping scrape."
+            "[scraper] ⏰ Market is closed (outside 9:16-17:45 CET, Mon-Fri). Skipping scrape."
         )
         return
 

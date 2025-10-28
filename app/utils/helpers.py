@@ -17,8 +17,11 @@ from bs4 import BeautifulSoup
 # -----------------------------
 BASE_URL = "https://www.beursduivel.be"
 TIMEZONE = pytz.timezone("Europe/Amsterdam")
+# Market hours: 9:16 AM - 5:45 PM Amsterdam time
 MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 16
 MARKET_CLOSE_HOUR = 17
+MARKET_CLOSE_MINUTE = 45
 
 # =====================================================
 # 🧮 NUMMER-CONVERSIES
@@ -62,7 +65,13 @@ def _to_float_nl(s: str) -> float | None:
     """Parseer floats met NL notatie (gebruikt in FD-scrapers)."""
     if not s:
         return None
-    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "").replace(",", ".")
+    s = (
+        s.strip()
+        .replace(".", "")
+        .replace("\xa0", "")
+        .replace(" ", "")
+        .replace(",", ".")
+    )
     m = re.search(r"-?\d+(\.\d+)?", s)
     return float(m.group(0)) if m else None
 
@@ -95,14 +104,25 @@ def _to_date(value):
 
 def is_market_open() -> bool:
     """
-    Controleer of de huidige tijd binnen beursuren (09:00–17:00 Amsterdam, Ma-Vr) valt.
+    Controleer of de huidige tijd binnen beursuren (09:16–17:45 Amsterdam, Ma-Vr) valt.
     """
     now = dt.datetime.now(TIMEZONE)
     # Check if it's a weekday (Monday=0, Sunday=6)
     is_weekday = now.weekday() < 5  # Monday=0 through Friday=4
-    # Check if it's during trading hours
-    is_trading_hours = MARKET_OPEN_HOUR <= now.hour < MARKET_CLOSE_HOUR
-    return is_weekday and is_trading_hours
+
+    if not is_weekday:
+        return False
+
+    # Convert current time to minutes since midnight for easier comparison
+    current_minutes = now.hour * 60 + now.minute
+    market_open_minutes = (
+        MARKET_OPEN_HOUR * 60 + MARKET_OPEN_MINUTE
+    )  # 9:16 = 556 minutes
+    market_close_minutes = (
+        MARKET_CLOSE_HOUR * 60 + MARKET_CLOSE_MINUTE
+    )  # 17:45 = 1065 minutes
+
+    return market_open_minutes <= current_minutes <= market_close_minutes
 
 
 def wait_minutes(minutes: int):
