@@ -65,13 +65,7 @@ def _to_float_nl(s: str) -> float | None:
     """Parseer floats met NL notatie (gebruikt in FD-scrapers)."""
     if not s:
         return None
-    s = (
-        s.strip()
-        .replace(".", "")
-        .replace("\xa0", "")
-        .replace(" ", "")
-        .replace(",", ".")
-    )
+    s = s.strip().replace(".", "").replace("\xa0", "").replace(" ", "").replace(",", ".")
     m = re.search(r"-?\d+(\.\d+)?", s)
     return float(m.group(0)) if m else None
 
@@ -115,12 +109,8 @@ def is_market_open() -> bool:
 
     # Convert current time to minutes since midnight for easier comparison
     current_minutes = now.hour * 60 + now.minute
-    market_open_minutes = (
-        MARKET_OPEN_HOUR * 60 + MARKET_OPEN_MINUTE
-    )  # 9:16 = 556 minutes
-    market_close_minutes = (
-        MARKET_CLOSE_HOUR * 60 + MARKET_CLOSE_MINUTE
-    )  # 17:45 = 1065 minutes
+    market_open_minutes = MARKET_OPEN_HOUR * 60 + MARKET_OPEN_MINUTE  # 9:16 = 556 minutes
+    market_close_minutes = MARKET_CLOSE_HOUR * 60 + MARKET_CLOSE_MINUTE  # 17:45 = 1065 minutes
 
     return market_open_minutes <= current_minutes <= market_close_minutes
 

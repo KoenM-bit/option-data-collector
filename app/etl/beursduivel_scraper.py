@@ -138,9 +138,7 @@ def parse_option_table(section_html: str, expiry_title: str):
             (
                 p
                 for p in (
-                    link_call["href"].split("/")
-                    if link_call and "href" in link_call.attrs
-                    else []
+                    link_call["href"].split("/") if link_call and "href" in link_call.attrs else []
                 )
                 if p.isdigit()
             ),
@@ -150,9 +148,7 @@ def parse_option_table(section_html: str, expiry_title: str):
             (
                 p
                 for p in (
-                    link_put["href"].split("/")
-                    if link_put and "href" in link_put.attrs
-                    else []
+                    link_put["href"].split("/") if link_put and "href" in link_put.attrs else []
                 )
                 if p.isdigit()
             ),
@@ -241,15 +237,11 @@ def fetch_option_chain(timeout=10):
                 **hidden_fields,
             }
             try:
-                r2 = requests.post(
-                    MAIN_URL, headers=HEADERS, data=payload, timeout=timeout
-                )
+                r2 = requests.post(MAIN_URL, headers=HEADERS, data=payload, timeout=timeout)
                 r2.raise_for_status()
                 more_options = parse_option_table(r2.text, expiry_title)
                 if more_options:
-                    print(
-                        f"  [expansion] Found +{len(more_options)} extra options via postback."
-                    )
+                    print(f"  [expansion] Found +{len(more_options)} extra options via postback.")
                     all_options.extend(more_options)
             except Exception as e:
                 print(f"  [warn] Could not load more for {expiry_title}: {e}")
@@ -517,16 +509,8 @@ def compute_and_store_live_greeks(options, spot_price):
             if sigma_mid is None or math.isnan(sigma_mid) or sigma_mid <= 0:
                 continue
 
-            sigma_bid = (
-                implied_vol(bid, spot_price, K, t, r, is_call)
-                if bid and bid > 0
-                else None
-            )
-            sigma_ask = (
-                implied_vol(ask, spot_price, K, t, r, is_call)
-                if ask and ask > 0
-                else None
-            )
+            sigma_bid = implied_vol(bid, spot_price, K, t, r, is_call) if bid and bid > 0 else None
+            sigma_ask = implied_vol(ask, spot_price, K, t, r, is_call) if ask and ask > 0 else None
 
             iv_spread = None
             if sigma_bid and sigma_ask and (sigma_bid > 0) and (sigma_ask > 0):
@@ -553,12 +537,8 @@ def compute_and_store_live_greeks(options, spot_price):
             contract_size = 100.0  # Standard option contract represents 100 shares
 
             # Calculate exposures based on standard option exposure formulas
-            delta_exposure = (
-                delta * contract_size * spot_price if delta is not None else None
-            )
-            gamma_exposure = (
-                gamma * contract_size * (spot_price**2) if gamma is not None else None
-            )
+            delta_exposure = delta * contract_size * spot_price if delta is not None else None
+            gamma_exposure = gamma * contract_size * (spot_price**2) if gamma is not None else None
             vega_exposure = (
                 vega * contract_size if vega is not None else None
             )  # Vega already in dollar terms
@@ -634,9 +614,7 @@ def compute_and_store_live_greeks(options, spot_price):
             )
         except Exception as e:
             if VERBOSE:
-                print(
-                    f"[greeks] Error calculating Greeks for {o['type']} {K} {expiry_text}: {e}"
-                )
+                print(f"[greeks] Error calculating Greeks for {o['type']} {K} {expiry_text}: {e}")
             continue
 
     print(f"[greeks] Calculated + prepared {len(rows)} rows for insert.")
@@ -680,9 +658,7 @@ def compute_and_store_live_greeks(options, spot_price):
 def run_once():
     """Run de scraper één keer."""
     if not is_market_open():
-        print(
-            "[scraper] ⏰ Market is closed (outside 9:16-17:45 CET, Mon-Fri). Skipping scrape."
-        )
+        print("[scraper] ⏰ Market is closed (outside 9:16-17:45 CET, Mon-Fri). Skipping scrape.")
         return
 
     print("Fetching Beursduivel data...")
@@ -700,9 +676,7 @@ def run_once():
         print("[scraper] ✅ Complete!")
     except Exception as e:
         print(f"[scraper] ❌ Failed to store Greeks in database: {e}")
-        print(
-            f"[scraper] Successfully fetched {len(options)} options, but could not store to DB."
-        )
+        print(f"[scraper] Successfully fetched {len(options)} options, but could not store to DB.")
         print("[scraper] Sample options fetched:")
         for i, opt in enumerate(options[:5]):
             print(
@@ -714,9 +688,7 @@ def run_once():
 
 def run_continuous():
     """Run elke 15 min tijdens beursuren (met dagelijkse cleanup)."""
-    print(
-        "[scraper] 🚀 Starting continuous live scraper (15min intervals during market hours)"
-    )
+    print("[scraper] 🚀 Starting continuous live scraper (15min intervals during market hours)")
     print("[scraper] Market hours: 9:00-17:00 CET, Monday-Friday")
     print("[scraper] 📊 Historical mode: Every scrape creates a new timestamped record")
 
@@ -836,18 +808,14 @@ def backfill_iv_fields_full():
                 sigma_bid = implied_vol(bid, spot, K, t, rfr, is_call)
                 sigma_ask = implied_vol(ask, spot, K, t, rfr, is_call)
                 sigma_mid = implied_vol(price_mid, spot, K, t, rfr, is_call)
-                if any(
-                    math.isnan(x) or x <= 0 for x in [sigma_bid, sigma_ask, sigma_mid]
-                ):
+                if any(math.isnan(x) or x <= 0 for x in [sigma_bid, sigma_ask, sigma_mid]):
                     continue
 
                 iv_spread = max(sigma_ask - sigma_bid, 0.0)
                 iv_delta = r["iv_delta_15m"]
                 vpi = iv_delta / iv_spread if iv_delta and iv_spread > 0 else None
 
-                updates.append(
-                    (sigma_bid, sigma_ask, sigma_mid, iv_spread, vpi, r["id"])
-                )
+                updates.append((sigma_bid, sigma_ask, sigma_mid, iv_spread, vpi, r["id"]))
 
             except Exception:
                 continue
@@ -869,9 +837,7 @@ def backfill_iv_fields_full():
 
     cur.close()
     conn.close()
-    print(
-        f"[backfill] ✅ Done — updated ~{updated} records with full IV + VPI backfill."
-    )
+    print(f"[backfill] ✅ Done — updated ~{updated} records with full IV + VPI backfill.")
 
 
 if __name__ == "__main__":
