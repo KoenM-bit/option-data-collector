@@ -93,7 +93,7 @@ run-scraper-once: venv ## Run a single Beursduivel scrape iteration
 	$(ENV_EXPORT) $(PYTHON) -c "from app.etl.beursduivel_scraper import run_once; run_once()"
 
 dashboard: venv ## Launch the Streamlit dashboard (Ctrl+C to stop)
-	$(ENV_EXPORT) $(VENV)/bin/streamlit run dashboards/streamlit_app.py
+	$(ENV_EXPORT) PYTHONPATH=. $(VENV)/bin/streamlit run dashboards/streamlit_app.py
 
 test-greeks: venv ## Compute Greeks for latest missing days
 	$(ENV_EXPORT) $(PYTHON) -c "from app.compute.option_greeks import compute_greeks_for_day; compute_greeks_for_day('AD.AS'); print('Greeks computed for AD.AS')"
