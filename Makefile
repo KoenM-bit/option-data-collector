@@ -20,7 +20,7 @@ ENV_EXPORT := set -a; [ -f .env ] && . ./.env; set +a;
 .ONESHELL:
 
 .PHONY: help venv install dev-install clean clean-venv fresh-start check-imports \
-	run-api run-etl run-sentiment run-scraper run-scraper-once test-greeks test-score test-all \
+	run-api run-etl run-sentiment run-scraper run-scraper-once dashboard test-greeks test-score test-all \
 	lint format format-check pre-commit-install pre-commit-run pre-commit-update quality test test-smoke \
 	docker-build docker-up docker-logs docker-logs-ts docker-up-logs docker-down docker-restart docker-clean \
 	docker-wait-api docker-health docker-test-api docker-test \
@@ -91,6 +91,9 @@ run-scraper: venv ## Run the live Beursduivel scraper (15min intervals during ma
 
 run-scraper-once: venv ## Run a single Beursduivel scrape iteration
 	$(ENV_EXPORT) $(PYTHON) -c "from app.etl.beursduivel_scraper import run_once; run_once()"
+
+dashboard: venv ## Launch the Streamlit dashboard (Ctrl+C to stop)
+	$(ENV_EXPORT) $(VENV)/bin/streamlit run dashboards/streamlit_app.py
 
 test-greeks: venv ## Compute Greeks for latest missing days
 	$(ENV_EXPORT) $(PYTHON) -c "from app.compute.option_greeks import compute_greeks_for_day; compute_greeks_for_day('AD.AS'); print('Greeks computed for AD.AS')"
