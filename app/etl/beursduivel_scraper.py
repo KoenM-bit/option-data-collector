@@ -331,6 +331,11 @@ def ensure_option_prices_live_table():
                 fetched_at DATETIME NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+                -- moneyness and liquidity metrics
+                moneyness DECIMAL(10,6) NULL,
+                bidask_spread_pct DECIMAL(10,6) NULL,
+                size_imbalance DECIMAL(10,6) NULL,
+
                 INDEX idx_option_time (ticker, type, expiry, strike, created_at),
                 INDEX idx_issue_time (issue_id, created_at),
                 INDEX idx_created_at (created_at)
@@ -360,6 +365,15 @@ def ensure_option_prices_live_table():
             "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS iv_spread DECIMAL(10,6) NULL",
             "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS iv_delta_15m DECIMAL(10,6) NULL",
             "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS vpi DECIMAL(10,6) NULL",
+            # Greek exposure columns (Greeks * position size)
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS delta_exposure DECIMAL(15,6) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS gamma_exposure DECIMAL(15,6) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS vega_exposure DECIMAL(15,6) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS theta_exposure DECIMAL(15,6) NULL",
+            # Moneyness and liquidity metrics
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS moneyness DECIMAL(10,6) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS bidask_spread_pct DECIMAL(10,6) NULL",
+            "ALTER TABLE option_prices_live ADD COLUMN IF NOT EXISTS size_imbalance DECIMAL(10,6) NULL",
         ]
         for stmt in alters:
             try:
@@ -535,6 +549,46 @@ def compute_and_store_live_greeks(options, spot_price):
             if iv_spread is not None and iv_spread > 0 and iv_delta_15m is not None:
                 vpi = iv_delta_15m / iv_spread
 
+            # 5) Greek Exposures (assume standard 100-share contract size)
+            contract_size = 100.0  # Standard option contract represents 100 shares
+
+            # Calculate exposures based on standard option exposure formulas
+            delta_exposure = (
+                delta * contract_size * spot_price if delta is not None else None
+            )
+            gamma_exposure = (
+                gamma * contract_size * (spot_price**2) if gamma is not None else None
+            )
+            vega_exposure = (
+                vega * contract_size if vega is not None else None
+            )  # Vega already in dollar terms
+            theta_exposure = (
+                theta * contract_size if theta is not None else None
+            )  # Theta already in dollar terms
+
+            # 6) Moneyness (S/K ratio)
+            moneyness = spot_price / K if K and K > 0 else None
+
+            # 7) Liquidity Proxies
+            bidask_spread_pct = None
+            if bid is not None and ask is not None and bid > 0 and ask > 0:
+                mid_price = (bid + ask) / 2.0
+                if mid_price > 0:
+                    bidask_spread_pct = ((ask - bid) / mid_price) * 100.0
+
+            size_imbalance = None
+            if (
+                o.get("bid_size") is not None
+                and o.get("ask_size") is not None
+                and o.get("bid_size") > 0
+                and o.get("ask_size") > 0
+            ):
+                bid_size = float(o.get("bid_size"))
+                ask_size = float(o.get("ask_size"))
+                total_size = bid_size + ask_size
+                if total_size > 0:
+                    size_imbalance = (ask_size - bid_size) / total_size
+
             rows.append(
                 {
                     "ticker": "AD.AS",
@@ -564,6 +618,15 @@ def compute_and_store_live_greeks(options, spot_price):
                     "gamma": _safe_float(gamma),
                     "vega": _safe_float(vega),
                     "theta": _safe_float(theta),
+                    # Greek Exposures (100-share contract basis)
+                    "delta_exposure": _safe_float(delta_exposure),
+                    "gamma_exposure": _safe_float(gamma_exposure),
+                    "vega_exposure": _safe_float(vega_exposure),
+                    "theta_exposure": _safe_float(theta_exposure),
+                    # Moneyness and liquidity metrics
+                    "moneyness": _safe_float(moneyness),
+                    "bidask_spread_pct": _safe_float(bidask_spread_pct),
+                    "size_imbalance": _safe_float(size_imbalance),
                     "spot_price": _safe_float(spot_price),
                     "fetched_at": datetime.now(),
                     "created_at": datetime.now(),
@@ -586,6 +649,8 @@ def compute_and_store_live_greeks(options, spot_price):
              last_price, last_time, trades, volume,
              iv, iv_bid, iv_ask, iv_mid, iv_spread, iv_delta_15m, vpi,
              delta, gamma, vega, theta,
+             delta_exposure, gamma_exposure, vega_exposure, theta_exposure,
+             moneyness, bidask_spread_pct, size_imbalance,
              spot_price, fetched_at, created_at)
             VALUES
             (%(ticker)s, %(issue_id)s, %(type)s, %(expiry)s, %(strike)s,
@@ -593,6 +658,8 @@ def compute_and_store_live_greeks(options, spot_price):
              %(last_price)s, %(last_time)s, %(trades)s, %(volume)s,
              %(iv)s, %(iv_bid)s, %(iv_ask)s, %(iv_mid)s, %(iv_spread)s, %(iv_delta_15m)s, %(vpi)s,
              %(delta)s, %(gamma)s, %(vega)s, %(theta)s,
+             %(delta_exposure)s, %(gamma_exposure)s, %(vega_exposure)s, %(theta_exposure)s,
+             %(moneyness)s, %(bidask_spread_pct)s, %(size_imbalance)s,
              %(spot_price)s, %(fetched_at)s, %(created_at)s)
         """
         cur.executemany(insert_sql, rows)
