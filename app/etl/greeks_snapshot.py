@@ -8,19 +8,21 @@ def ensure_greeks_history_table():
     conn = get_connection()
     cur = conn.cursor()
 
+    # Use existing schema - table likely already exists with different structure
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS fd_greeks_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             ticker VARCHAR(10) NOT NULL,
-            timestamp DATETIME NOT NULL,
-            total_delta DECIMAL(12,4),
-            total_gamma DECIMAL(12,6),
-            total_vega DECIMAL(12,4),
-            total_theta DECIMAL(12,4),
-            source VARCHAR(20) DEFAULT 'live',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_snapshot (ticker, DATE(timestamp), HOUR(timestamp), MINUTE(timestamp) DIV 15)
+            as_of_date DATE NOT NULL,
+            ts DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            total_delta DECIMAL(18,8),
+            total_gamma DECIMAL(18,8),
+            total_vega DECIMAL(18,8),
+            total_theta DECIMAL(18,8),
+            spot_price DECIMAL(18,8),
+            source ENUM('live','daily') DEFAULT 'live',
+            INDEX idx_ticker_date (ticker, as_of_date, ts)
         )
     """
     )
@@ -61,9 +63,9 @@ def record_greek_snapshot(ticker="AD.AS", interval_minutes=15):
         SELECT COUNT(*) AS cnt
         FROM fd_greeks_history
         WHERE ticker=%s
-        AND DATE(timestamp)=%s
-        AND HOUR(timestamp)=%s
-        AND MINUTE(timestamp) DIV %s = %s
+        AND as_of_date=%s
+        AND HOUR(ts)=%s
+        AND MINUTE(ts) DIV %s = %s
     """,
         (ticker, today, now.hour, interval_minutes, interval_slot // interval_minutes),
     )
@@ -87,24 +89,45 @@ def record_greek_snapshot(ticker="AD.AS", interval_minutes=15):
                 ) AS rn
             FROM option_prices_live
             WHERE ticker = %s
+        ),
+        month_mapping AS (
+            SELECT
+                p.ticker, p.expiry as position_expiry, p.strike, p.type, p.quantity,
+                CASE
+                    WHEN MONTH(p.expiry) = 1 THEN 'Januari'
+                    WHEN MONTH(p.expiry) = 2 THEN 'Februari'
+                    WHEN MONTH(p.expiry) = 3 THEN 'Maart'
+                    WHEN MONTH(p.expiry) = 4 THEN 'April'
+                    WHEN MONTH(p.expiry) = 5 THEN 'Mei'
+                    WHEN MONTH(p.expiry) = 6 THEN 'Juni'
+                    WHEN MONTH(p.expiry) = 7 THEN 'Juli'
+                    WHEN MONTH(p.expiry) = 8 THEN 'Augustus'
+                    WHEN MONTH(p.expiry) = 9 THEN 'September'
+                    WHEN MONTH(p.expiry) = 10 THEN 'Oktober'
+                    WHEN MONTH(p.expiry) = 11 THEN 'November'
+                    WHEN MONTH(p.expiry) = 12 THEN 'December'
+                END as dutch_month,
+                YEAR(p.expiry) as expiry_year
+            FROM fd_positions p
+            WHERE p.ticker = %s
         )
         SELECT
-            p.ticker,
-            ROUND(SUM(p.quantity * o.delta * 100), 4) AS total_delta,
-            ROUND(SUM(p.quantity * o.gamma * 100), 6) AS total_gamma,
-            ROUND(SUM(p.quantity * o.vega), 4) AS total_vega,
-            ROUND(SUM(p.quantity * o.theta), 4) AS total_theta,
+            m.ticker,
+            ROUND(SUM(m.quantity * o.delta * 100), 4) AS total_delta,
+            ROUND(SUM(m.quantity * o.gamma * 100), 6) AS total_gamma,
+            ROUND(SUM(m.quantity * o.vega), 4) AS total_vega,
+            ROUND(SUM(m.quantity * o.theta), 4) AS total_theta,
             COUNT(*) AS position_count
-        FROM fd_positions p
+        FROM month_mapping m
         JOIN latest_options o
-          ON p.ticker = o.ticker
-         AND p.expiry = o.expiry  -- Exact date match
-         AND ABS(p.strike - o.strike) < 0.01  -- Handle floating point precision
-         AND UPPER(p.type) = UPPER(o.type)
+          ON m.ticker = o.ticker
+         AND o.expiry = CONCAT(m.dutch_month, ' ', m.expiry_year)  -- Match month format
+         AND ABS(m.strike - o.strike) < 0.01  -- Handle floating point precision
+         AND UPPER(m.type) = UPPER(o.type)
         WHERE o.rn = 1  -- Latest data only
-        GROUP BY p.ticker
+        GROUP BY m.ticker
     """,
-        (ticker,),
+        (ticker, ticker),
     )
 
     row = cur.fetchone()
@@ -114,20 +137,30 @@ def record_greek_snapshot(ticker="AD.AS", interval_minutes=15):
         conn.close()
         return
 
+    # Get current spot price (simple fallback)
+    try:
+        import yfinance as yf
+
+        spot_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+    except:
+        spot_price = 36.84  # Fallback
+
     # Insert snapshot
     cur.execute(
         """
         INSERT INTO fd_greeks_history
-        (ticker, timestamp, total_delta, total_gamma, total_vega, total_theta, source)
-        VALUES (%s, %s, %s, %s, %s, %s, 'live')
+        (ticker, as_of_date, ts, total_delta, total_gamma, total_vega, total_theta, spot_price, source)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'live')
     """,
         (
             ticker,
+            today,
             snapshot_time,
             row["total_delta"],
             row["total_gamma"],
             row["total_vega"],
             row["total_theta"],
+            spot_price,
         ),
     )
     conn.commit()
@@ -136,7 +169,7 @@ def record_greek_snapshot(ticker="AD.AS", interval_minutes=15):
         f"✅ Snapshot opgeslagen voor {ticker} ({snapshot_time}) → "
         f"Δ={row['total_delta']}, Γ={row['total_gamma']}, "
         f"Θ={row['total_theta']}, ν={row['total_vega']} "
-        f"({row['position_count']} posities)"
+        f"({row['position_count']} posities) @ €{spot_price}"
     )
 
     cur.close()
@@ -151,15 +184,17 @@ def get_latest_greeks_summary(ticker="AD.AS", hours_back=24):
     cur.execute(
         """
         SELECT
-            timestamp,
+            as_of_date,
+            ts,
             total_delta,
             total_gamma,
             total_vega,
-            total_theta
+            total_theta,
+            spot_price
         FROM fd_greeks_history
         WHERE ticker = %s
-        AND timestamp >= DATE_SUB(NOW(), INTERVAL %s HOUR)
-        ORDER BY timestamp DESC
+        AND ts >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+        ORDER BY ts DESC
     """,
         (ticker, hours_back),
     )
