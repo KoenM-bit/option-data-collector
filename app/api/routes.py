@@ -112,6 +112,119 @@ def latest_sentiment(ticker):
     return jsonify(row)
 
 
+@app.route("/api/greeks/summary/<string:ticker>")
+def greeks_summary(ticker):
+    """
+    Geeft een overzicht van de totale Greeks voor alle posities van een ticker,
+    plus een strategische suggestie (hedge / hold / adjust).
+    ---
+    parameters:
+      - name: ticker
+        in: path
+        type: string
+        required: true
+        description: De ticker (bijv. AD.AS)
+    responses:
+      200:
+        description: Overzicht van totale Greeks en suggesties
+    """
+    import yfinance as yf
+
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+
+    # Haal laatste Greeks per contract (laatste record per strike/type/expiry)
+    cur.execute(
+        """
+        WITH latest AS (
+            SELECT
+                g.ticker, g.expiry, g.strike, g.type,
+                g.delta, g.gamma, g.vega, g.theta, g.price,
+                ROW_NUMBER() OVER (
+                    PARTITION BY g.ticker, g.expiry, g.strike, g.type
+                    ORDER BY g.created_at DESC
+                ) rn
+            FROM fd_option_greeks g
+            WHERE g.ticker = %s
+        )
+        SELECT p.ticker, p.expiry, p.strike, p.type, p.quantity,
+               g.delta, g.gamma, g.vega, g.theta, g.price
+        FROM fd_positions p
+        JOIN latest g
+          ON p.ticker = g.ticker
+         AND p.expiry = g.expiry
+         AND p.strike = g.strike
+         AND p.type = g.type
+        WHERE g.rn = 1;
+    """,
+        (ticker,),
+    )
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not rows:
+        return jsonify({"error": f"Geen posities gevonden voor {ticker}"}), 404
+
+    # Totale Greeks berekenen (met ×100 omdat 1 contract = 100 aandelen)
+    total_delta = sum(r["delta"] * r["quantity"] * 100 for r in rows)
+    total_gamma = sum(r["gamma"] * r["quantity"] * 100 for r in rows)
+    total_vega = sum(r["vega"] * r["quantity"] for r in rows)
+    total_theta = sum(r["theta"] * r["quantity"] for r in rows)
+
+    # Spot ophalen (via Yahoo Finance)
+    try:
+        spot = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+    except Exception:
+        spot = None
+
+    # Analyse / suggesties genereren
+    suggestion = []
+    if abs(total_delta) > 300:
+        suggestion.append("⚠️ Hoge delta-exposure — overweeg (gedeeltelijke) hedge met aandelen.")
+    elif abs(total_delta) < 100:
+        suggestion.append("✅ Delta-neutraal — prima uitgebalanceerd.")
+    else:
+        suggestion.append("ℹ️ Licht directioneel, maar beheersbaar.")
+
+    if total_gamma < -0.5:
+        suggestion.append(
+            "⚠️ Short gamma — risico bij grote bewegingen, wees alert op volatiliteit."
+        )
+    elif total_gamma > 0.5:
+        suggestion.append("✅ Long gamma — profiteert van snelle bewegingen.")
+    else:
+        suggestion.append("ℹ️ Neutrale gamma-positie.")
+
+    if total_theta > 0:
+        suggestion.append(f"✅ Positieve theta ({total_theta:.2f}) — verdient tijdswaarde per dag.")
+    else:
+        suggestion.append("⚠️ Negatieve theta — kost tijdswaarde per dag.")
+
+    if total_vega > 0:
+        suggestion.append("✅ Long vega — profiteert van hogere implied volatility.")
+    elif total_vega < 0:
+        suggestion.append("⚠️ Short vega — gevoelig voor stijgende implied volatility.")
+    else:
+        suggestion.append("ℹ️ Neutrale volatiliteitsblootstelling.")
+
+    return jsonify(
+        {
+            "ticker": ticker,
+            "spot": spot,
+            "positions": rows,
+            "totals": {
+                "delta": round(total_delta, 2),
+                "gamma": round(total_gamma, 4),
+                "vega": round(total_vega, 4),
+                "theta": round(total_theta, 4),
+            },
+            "suggestions": suggestion,
+        }
+    )
+
+
 @app.route("/api/live")
 def all_live_options():
     """Alle live optieprijzen met optionele filters (voor Power BI)."""
