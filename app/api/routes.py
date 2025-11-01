@@ -3,6 +3,7 @@
 from flask import Flask, jsonify
 from flasgger import Swagger
 from app.db import get_connection
+from app.etl.greeks_snapshot import get_latest_greeks_summary
 import datetime as dt
 import json
 
@@ -80,6 +81,25 @@ def list_contracts():
 # ------------------------
 # SENTIMENT ENDPOINTS
 # ------------------------
+
+
+@app.route("/api/greeks/history/<string:ticker>", methods=["GET"])
+def get_greeks_history(ticker):
+    """
+    Haal recente Greeks history op voor een ticker.
+    - Queryparam: ?hours=48 (standaard 24 uur)
+    """
+    from flask import request
+
+    hours_back = request.args.get("hours", default=24, type=int)
+    data = get_latest_greeks_summary(ticker, hours_back)
+
+    if not data:
+        return jsonify({"ticker": ticker, "error": "Geen snapshots gevonden"}), 404
+
+    return jsonify(
+        {"ticker": ticker, "count": len(data), "hours_back": hours_back, "snapshots": data}
+    )
 
 
 @app.route("/api/sentiment/<string:ticker>")
