@@ -214,6 +214,8 @@ def fetch_option_chain(timeout=10):
         hidden_fields["__EVENTVALIDATION"] = event_validation["value"]
 
     all_options = []
+    # Track unique contracts to prevent duplicates from initial + expanded tables
+    seen_contracts = set()
 
     for section in soup.select("section.contentblock"):
         title_el = section.find("h3", class_="titlecontent")
@@ -225,7 +227,20 @@ def fetch_option_chain(timeout=10):
 
         print(f"[scraper] Processing expiry: {expiry_title}")
         partial = parse_option_table(str(section), expiry_title)
-        all_options.extend(partial)
+
+        # Add only unique contracts (prevent duplicates between initial and expanded tables)
+        initial_count = len(all_options)
+        for opt in partial:
+            contract_key = (opt["type"], opt["expiry"], opt["strike"], opt.get("issue_id"))
+            if contract_key not in seen_contracts:
+                seen_contracts.add(contract_key)
+                all_options.append(opt)
+
+        added_initial = len(all_options) - initial_count
+        if added_initial < len(partial):
+            print(
+                f"  [dedup] Filtered {len(partial) - added_initial} duplicate contracts from initial table"
+            )
 
         # 'Meer opties' via POST simuleren
         more_link = section.find("a", class_="morelink")
@@ -241,12 +256,31 @@ def fetch_option_chain(timeout=10):
                 r2.raise_for_status()
                 more_options = parse_option_table(r2.text, expiry_title)
                 if more_options:
-                    print(f"  [expansion] Found +{len(more_options)} extra options via postback.")
-                    all_options.extend(more_options)
+                    # Filter duplicates from expanded table
+                    expansion_count = len(all_options)
+                    for opt in more_options:
+                        contract_key = (
+                            opt["type"],
+                            opt["expiry"],
+                            opt["strike"],
+                            opt.get("issue_id"),
+                        )
+                        if contract_key not in seen_contracts:
+                            seen_contracts.add(contract_key)
+                            all_options.append(opt)
+
+                    added_expansion = len(all_options) - expansion_count
+                    print(
+                        f"  [expansion] Found +{added_expansion} unique extra options via postback."
+                    )
+                    if added_expansion < len(more_options):
+                        print(
+                            f"  [dedup] Filtered {len(more_options) - added_expansion} duplicate contracts from expansion"
+                        )
             except Exception as e:
                 print(f"  [warn] Could not load more for {expiry_title}: {e}")
 
-    print(f"[scraper] Option chain fetched: {len(all_options)} total options.")
+    print(f"[scraper] Option chain fetched: {len(all_options)} total unique options.")
     return all_options
 
 
@@ -428,8 +462,14 @@ def save_option_prices_live(options, spot_price):
 # ------------------------
 
 
-def compute_and_store_live_greeks(options, spot_price):
-    """Bereken Greeks en sla volledige snapshot op."""
+def compute_and_store_live_greeks(options, spot_price, prevent_duplicates=False):
+    """Bereken Greeks en sla volledige snapshot op.
+
+    Args:
+        options: List of option contracts from scraper
+        spot_price: Current underlying price
+        prevent_duplicates: If True, prevents duplicate records for same contract within same minute
+    """
     print(f"[greeks] Starting Greeks calculation for {len(options)} options...")
     ensure_option_prices_live_table()
     conn = get_connection()
@@ -620,29 +660,70 @@ def compute_and_store_live_greeks(options, spot_price):
     print(f"[greeks] Calculated + prepared {len(rows)} rows for insert.")
 
     if rows:
-        insert_sql = """
-            INSERT INTO option_prices_live
-            (ticker, issue_id, type, expiry, strike,
-             price, bid, ask, bid_size, ask_size,
-             last_price, last_time, trades, volume,
-             iv, iv_bid, iv_ask, iv_mid, iv_spread, iv_delta_15m, vpi,
-             delta, gamma, vega, theta,
-             delta_exposure, gamma_exposure, vega_exposure, theta_exposure,
-             moneyness, bidask_spread_pct, size_imbalance,
-             spot_price, fetched_at, created_at)
-            VALUES
-            (%(ticker)s, %(issue_id)s, %(type)s, %(expiry)s, %(strike)s,
-             %(price)s, %(bid)s, %(ask)s, %(bid_size)s, %(ask_size)s,
-             %(last_price)s, %(last_time)s, %(trades)s, %(volume)s,
-             %(iv)s, %(iv_bid)s, %(iv_ask)s, %(iv_mid)s, %(iv_spread)s, %(iv_delta_15m)s, %(vpi)s,
-             %(delta)s, %(gamma)s, %(vega)s, %(theta)s,
-             %(delta_exposure)s, %(gamma_exposure)s, %(vega_exposure)s, %(theta_exposure)s,
-             %(moneyness)s, %(bidask_spread_pct)s, %(size_imbalance)s,
-             %(spot_price)s, %(fetched_at)s, %(created_at)s)
-        """
+        if prevent_duplicates:
+            # Use ON DUPLICATE KEY UPDATE to prevent duplicates based on ticker, type, expiry, strike, minute
+            insert_sql = """
+                INSERT INTO option_prices_live
+                (ticker, issue_id, type, expiry, strike,
+                 price, bid, ask, bid_size, ask_size,
+                 last_price, last_time, trades, volume,
+                 iv, iv_bid, iv_ask, iv_mid, iv_spread, iv_delta_15m, vpi,
+                 delta, gamma, vega, theta,
+                 delta_exposure, gamma_exposure, vega_exposure, theta_exposure,
+                 moneyness, bidask_spread_pct, size_imbalance,
+                 spot_price, fetched_at, created_at)
+                VALUES
+                (%(ticker)s, %(issue_id)s, %(type)s, %(expiry)s, %(strike)s,
+                 %(price)s, %(bid)s, %(ask)s, %(bid_size)s, %(ask_size)s,
+                 %(last_price)s, %(last_time)s, %(trades)s, %(volume)s,
+                 %(iv)s, %(iv_bid)s, %(iv_ask)s, %(iv_mid)s, %(iv_spread)s, %(iv_delta_15m)s, %(vpi)s,
+                 %(delta)s, %(gamma)s, %(vega)s, %(theta)s,
+                 %(delta_exposure)s, %(gamma_exposure)s, %(vega_exposure)s, %(theta_exposure)s,
+                 %(moneyness)s, %(bidask_spread_pct)s, %(size_imbalance)s,
+                 %(spot_price)s, %(fetched_at)s, %(created_at)s)
+                ON DUPLICATE KEY UPDATE
+                    price=VALUES(price), bid=VALUES(bid), ask=VALUES(ask),
+                    bid_size=VALUES(bid_size), ask_size=VALUES(ask_size),
+                    last_price=VALUES(last_price), last_time=VALUES(last_time),
+                    trades=VALUES(trades), volume=VALUES(volume),
+                    iv=VALUES(iv), iv_bid=VALUES(iv_bid), iv_ask=VALUES(iv_ask),
+                    iv_mid=VALUES(iv_mid), iv_spread=VALUES(iv_spread),
+                    iv_delta_15m=VALUES(iv_delta_15m), vpi=VALUES(vpi),
+                    delta=VALUES(delta), gamma=VALUES(gamma), vega=VALUES(vega), theta=VALUES(theta),
+                    delta_exposure=VALUES(delta_exposure), gamma_exposure=VALUES(gamma_exposure),
+                    vega_exposure=VALUES(vega_exposure), theta_exposure=VALUES(theta_exposure),
+                    moneyness=VALUES(moneyness), bidask_spread_pct=VALUES(bidask_spread_pct),
+                    size_imbalance=VALUES(size_imbalance), spot_price=VALUES(spot_price),
+                    fetched_at=VALUES(fetched_at), created_at=VALUES(created_at)
+            """
+            print("[greeks] Using duplicate prevention mode...")
+        else:
+            # Normal insert - allows historical time series (multiple records per contract)
+            insert_sql = """
+                INSERT INTO option_prices_live
+                (ticker, issue_id, type, expiry, strike,
+                 price, bid, ask, bid_size, ask_size,
+                 last_price, last_time, trades, volume,
+                 iv, iv_bid, iv_ask, iv_mid, iv_spread, iv_delta_15m, vpi,
+                 delta, gamma, vega, theta,
+                 delta_exposure, gamma_exposure, vega_exposure, theta_exposure,
+                 moneyness, bidask_spread_pct, size_imbalance,
+                 spot_price, fetched_at, created_at)
+                VALUES
+                (%(ticker)s, %(issue_id)s, %(type)s, %(expiry)s, %(strike)s,
+                 %(price)s, %(bid)s, %(ask)s, %(bid_size)s, %(ask_size)s,
+                 %(last_price)s, %(last_time)s, %(trades)s, %(volume)s,
+                 %(iv)s, %(iv_bid)s, %(iv_ask)s, %(iv_mid)s, %(iv_spread)s, %(iv_delta_15m)s, %(vpi)s,
+                 %(delta)s, %(gamma)s, %(vega)s, %(theta)s,
+                 %(delta_exposure)s, %(gamma_exposure)s, %(vega_exposure)s, %(theta_exposure)s,
+                 %(moneyness)s, %(bidask_spread_pct)s, %(size_imbalance)s,
+                 %(spot_price)s, %(fetched_at)s, %(created_at)s)
+            """
+
         cur.executemany(insert_sql, rows)
         conn.commit()
-        print(f"✅ {len(rows)} historical records inserted into option_prices_live.")
+        action = "updated/inserted" if prevent_duplicates else "inserted"
+        print(f"✅ {len(rows)} records {action} into option_prices_live.")
     else:
         print("⚠️ No valid options to store.")
 
@@ -672,7 +753,7 @@ def run_once():
     print(f"[scraper] Gebruik spotprijs = {spot_price:.3f}")
 
     try:
-        compute_and_store_live_greeks(options, spot_price)
+        compute_and_store_live_greeks(options, spot_price, prevent_duplicates=True)
         print("[scraper] ✅ Complete!")
     except Exception as e:
         print(f"[scraper] ❌ Failed to store Greeks in database: {e}")
@@ -840,10 +921,228 @@ def backfill_iv_fields_full():
     print(f"[backfill] ✅ Done — updated ~{updated} records with full IV + VPI backfill.")
 
 
+def update_existing_greeks():
+    """
+    Recalculate and update ONLY the Greeks columns for existing records in option_prices_live.
+    Leaves all other data (prices, volumes, timestamps, etc.) untouched.
+    """
+    print("[update_greeks] Starting Greeks recalculation for existing records...")
+
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+
+    # Get total count for progress tracking
+    cur.execute(
+        "SELECT COUNT(*) as total FROM option_prices_live WHERE bid > 0 AND ask > 0 AND spot_price > 0"
+    )
+    total = cur.fetchone()["total"]
+
+    if total == 0:
+        print("[update_greeks] No valid records found to update.")
+        cur.close()
+        conn.close()
+        return
+
+    print(f"[update_greeks] Found {total} records to update...")
+
+    # Process in batches to avoid memory issues
+    batch_size = 500
+    offset = 0
+    updated = 0
+
+    # Month mapping for expiry parsing
+    month_map = {
+        "Januari": 1,
+        "Februari": 2,
+        "Maart": 3,
+        "April": 4,
+        "Mei": 5,
+        "Juni": 6,
+        "Juli": 7,
+        "Augustus": 8,
+        "September": 9,
+        "Oktober": 10,
+        "November": 11,
+        "December": 12,
+    }
+
+    today = date.today()
+
+    while offset < total:
+        # Fetch batch of records that need updating
+        cur.execute(
+            """
+            SELECT id, type, expiry, strike, bid, ask, spot_price, bid_size, ask_size
+            FROM option_prices_live
+            WHERE bid > 0 AND ask > 0 AND spot_price > 0
+            ORDER BY id ASC
+            LIMIT %s OFFSET %s
+        """,
+            (batch_size, offset),
+        )
+
+        records = cur.fetchall()
+        if not records:
+            break
+
+        updates = []
+
+        for record in records:
+            try:
+                bid = float(record["bid"])
+                ask = float(record["ask"])
+                spot_price = float(record["spot_price"])
+
+                if bid <= 0 or ask <= 0 or spot_price <= 0:
+                    continue
+
+                price_mid = 0.5 * (bid + ask)
+
+                # Parse expiry date
+                expiry_text = record["expiry"].split("(")[0].strip()
+                parts = expiry_text.split()
+                if len(parts) < 2:
+                    continue
+
+                month = month_map.get(parts[0], 12)
+                year = int(parts[1])
+                expiry_date = date(year, month, 15)
+
+                days = (expiry_date - today).days
+                if days <= 0:
+                    continue
+
+                t = max(days / 365.0, 0.001)
+                r = risk_free_rate_for_days(days)
+                is_call = record["type"].lower() == "call"
+
+                K = float(record["strike"])
+                if K <= 0:
+                    continue
+
+                # Calculate implied volatility using corrected function
+                sigma_mid = implied_vol(price_mid, spot_price, K, t, r, is_call)
+                if sigma_mid is None or math.isnan(sigma_mid) or sigma_mid <= 0:
+                    continue
+
+                sigma_bid = implied_vol(bid, spot_price, K, t, r, is_call) if bid > 0 else None
+                sigma_ask = implied_vol(ask, spot_price, K, t, r, is_call) if ask > 0 else None
+
+                # Calculate Greeks using corrected functions
+                delta = bs_delta(spot_price, K, t, r, sigma_mid, is_call)
+                gamma = bs_gamma(spot_price, K, t, r, sigma_mid)
+                vega = bs_vega(spot_price, K, t, r, sigma_mid)
+                theta = bs_theta(spot_price, K, t, r, sigma_mid, is_call)
+
+                # Check for NaN values
+                if any(
+                    math.isnan(x) if x is not None else False
+                    for x in [delta, gamma, vega, theta, sigma_mid]
+                ):
+                    continue
+
+                # Calculate additional IV metrics
+                iv_spread = None
+                if sigma_bid and sigma_ask and sigma_bid > 0 and sigma_ask > 0:
+                    iv_spread = max(sigma_ask - sigma_bid, 0.0)
+
+                # Calculate Greek exposures (100-share contract)
+                contract_size = 100.0
+                delta_exposure = delta * contract_size * spot_price if delta is not None else None
+                gamma_exposure = (
+                    gamma * contract_size * (spot_price**2) if gamma is not None else None
+                )
+                vega_exposure = vega * contract_size if vega is not None else None
+                theta_exposure = theta * contract_size if theta is not None else None
+
+                # Calculate moneyness
+                moneyness = spot_price / K if K > 0 else None
+
+                # Calculate bid-ask spread percentage
+                bidask_spread_pct = None
+                if bid > 0 and ask > 0:
+                    mid_price = (bid + ask) / 2.0
+                    if mid_price > 0:
+                        bidask_spread_pct = ((ask - bid) / mid_price) * 100.0
+
+                # Calculate size imbalance
+                size_imbalance = None
+                if (
+                    record.get("bid_size") is not None
+                    and record.get("ask_size") is not None
+                    and record.get("bid_size") > 0
+                    and record.get("ask_size") > 0
+                ):
+                    bid_size = float(record["bid_size"])
+                    ask_size = float(record["ask_size"])
+                    total_size = bid_size + ask_size
+                    if total_size > 0:
+                        size_imbalance = (ask_size - bid_size) / total_size
+
+                # Prepare update values (only Greeks and derived metrics)
+                updates.append(
+                    (
+                        _safe_float(sigma_mid),  # iv
+                        _safe_float(sigma_bid),  # iv_bid
+                        _safe_float(sigma_ask),  # iv_ask
+                        _safe_float(sigma_mid),  # iv_mid
+                        _safe_float(iv_spread),  # iv_spread
+                        _safe_float(delta),  # delta
+                        _safe_float(gamma),  # gamma
+                        _safe_float(vega),  # vega
+                        _safe_float(theta),  # theta
+                        _safe_float(delta_exposure),  # delta_exposure
+                        _safe_float(gamma_exposure),  # gamma_exposure
+                        _safe_float(vega_exposure),  # vega_exposure
+                        _safe_float(theta_exposure),  # theta_exposure
+                        _safe_float(moneyness),  # moneyness
+                        _safe_float(bidask_spread_pct),  # bidask_spread_pct
+                        _safe_float(size_imbalance),  # size_imbalance
+                        record["id"],  # WHERE condition
+                    )
+                )
+
+            except Exception as e:
+                if VERBOSE:
+                    print(f"[update_greeks] Error processing record {record['id']}: {e}")
+                continue
+
+        # Batch update the Greeks columns only
+        if updates:
+            update_sql = """
+                UPDATE option_prices_live SET
+                    iv = %s, iv_bid = %s, iv_ask = %s, iv_mid = %s, iv_spread = %s,
+                    delta = %s, gamma = %s, vega = %s, theta = %s,
+                    delta_exposure = %s, gamma_exposure = %s, vega_exposure = %s, theta_exposure = %s,
+                    moneyness = %s, bidask_spread_pct = %s, size_imbalance = %s
+                WHERE id = %s
+            """
+            cur.executemany(update_sql, updates)
+            conn.commit()
+            updated += len(updates)
+
+            print(f"[update_greeks] Updated {updated}/{total} records ({(updated/total)*100:.1f}%)")
+
+        offset += batch_size
+
+    cur.close()
+    conn.close()
+
+    print(f"[update_greeks] ✅ Completed! Updated Greeks for {updated} records.")
+    print(
+        f"[update_greeks] Skipped {total - updated} records due to invalid data or calculation errors."
+    )
+
+
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--continuous":
-        run_continuous()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--continuous":
+            run_continuous()
+        elif sys.argv[1] == "--update-greeks":
+            update_existing_greeks()
+        else:
+            print("Usage: python beursduivel_scraper.py [--continuous|--update-greeks]")
     else:
         run_once()

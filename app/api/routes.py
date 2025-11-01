@@ -112,6 +112,37 @@ def latest_sentiment(ticker):
     return jsonify(row)
 
 
+@app.route("/api/live")
+def all_live_options():
+    """Alle live optieprijzen met optionele filters (voor Power BI)."""
+    from flask import request
+
+    limit = request.args.get("limit", default=None, type=int)
+    expiry = request.args.get("expiry", default=None, type=str)
+
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+
+    query = "SELECT * FROM option_prices_live"
+    params = []
+
+    if expiry:
+        query += " WHERE expiry = %s"
+        params.append(expiry)
+
+    # ✅ Sorteer op fetched_at (beste tijdskolom voor 'live' data)
+    query += " ORDER BY fetched_at DESC"
+
+    if limit and isinstance(limit, int):
+        query += f" LIMIT {limit}"
+
+    cur.execute(query, tuple(params))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify(rows)
+
+
 @app.route("/api/status")
 def status():
     """API-status."""
@@ -128,4 +159,4 @@ def status():
 # RUN APP
 # ------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=8090)

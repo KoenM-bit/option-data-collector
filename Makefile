@@ -95,11 +95,14 @@ run-scraper-once: venv ## Run a single Beursduivel scrape iteration
 dashboard: venv ## Launch the Streamlit dashboard (Ctrl+C to stop)
 	$(ENV_EXPORT) PYTHONPATH=. $(VENV)/bin/streamlit run dashboards/streamlit_app.py
 
-test-greeks: venv ## Compute Greeks for latest missing days
-	$(ENV_EXPORT) $(PYTHON) -c "from app.compute.option_greeks import compute_greeks_for_day; compute_greeks_for_day('AD.AS'); print('Greeks computed for AD.AS')"
+test-greeks: venv ## Compute Greeks for all missing days
+	$(ENV_EXPORT) $(PYTHON) -c "from app.compute.option_greeks import compute_all_missing_greeks; compute_all_missing_greeks('AD.AS'); print('All missing Greeks computed for AD.AS')"
 
 test-score: venv ## Compute option scores incrementally
 	$(ENV_EXPORT) $(PYTHON) -c "from app.compute.compute_option_score import compute_option_score; compute_option_score('AD.AS'); print('Scores computed for AD.AS')"
+
+update-greeks: venv ## Update Greeks for all existing records in option_prices_live table
+	$(ENV_EXPORT) $(PYTHON) app/etl/beursduivel_scraper.py --update-greeks
 
 test-all: ## Run import check, greeks, scores, and one scraper pass
 	$(MAKE) check-imports

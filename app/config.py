@@ -1,4 +1,12 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+print("DEBUG: DB_HOST =", os.getenv("DB_HOST"))
+print("DEBUG: DB_USER =", os.getenv("DB_USER"))
+print("DEBUG: DB_PASS =", os.getenv("DB_PASS"))
+print("DEBUG: DB_NAME =", os.getenv("DB_NAME"))
 
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
