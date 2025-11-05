@@ -16,6 +16,7 @@ Collect, compute, and serve option market data for Ahold Delhaize (and extendabl
   - `daily_etl.py` — orchestrates: overview → contracts → Greeks → scores (idempotent per peildatum)
   - `beursduivel_scraper.py` — live option prices (market-hours loop)
   - `sentiment_tracker.py` — analyst recommendations and price targets (yfinance)
+  - `greeks_snapshot.py` — portfolio Greeks snapshots every 15 minutes on market days
 - Compute: `app/compute/`
   - `option_greeks.py` — implied vol + Greeks using mid-price and ECB Euribor-based r
   - `compute_option_score.py` — macro/micro/total scores and price skew
@@ -217,8 +218,35 @@ Replace `<owner>` with your GitHub username or org (lowercase). If the repo is p
 - `GET /api/contracts` — unique expiries, strikes, and types
 - `GET /api/sentiment/<ticker>` — latest sentiment snapshot
 - `GET /api/sentiment/trend/<ticker>` — sentiment trend and summary
+- `GET /api/greeks/summary/<ticker>` — totals across positions (Δ, Γ, ν, Θ) + strategic suggestions
+- `GET /api/greeks/history/<ticker>?hours=24` — recent portfolio Greeks snapshots (default last 24h)
+- `GET /api/live?limit=100&expiry=November%202025` — live options with optional filters (limit, expiry)
 
 Swagger UI is enabled via Flasgger.
+
+### Greeks snapshots (portfolio)
+
+The service can record portfolio-wide Greeks snapshots on market days every 15 minutes.
+
+- Code: `app/etl/greeks_snapshot.py`
+- Table: `fd_greeks_history`
+  - Columns: `ticker`, `as_of_date`, `ts`, `total_delta`, `total_gamma`, `total_vega`, `total_theta`, `spot_price`, `source`
+- Matching logic joins your `fd_positions` with the latest `option_prices_live` per contract, handling Dutch month names and strike precision.
+
+Schedule via cron (example on a server that has the repo checked out and venv active):
+
+```bash
+# Every 15 minutes during market hours (Mon–Fri 09:00–17:30 local)
+*/15 9-17 * * 1-5 cd /path/to/option-data-collector && \
+  .venv/bin/python -c "from app.etl.greeks_snapshot import record_greek_snapshot; record_greek_snapshot('AD.AS')"
+```
+
+API access to snapshots:
+
+- Summary of current exposures and suggestions:
+  - `GET /api/greeks/summary/AD.AS`
+- History for the last N hours (default 24):
+  - `GET /api/greeks/history/AD.AS?hours=48`
 
 ## Troubleshooting
 
