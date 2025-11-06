@@ -87,11 +87,25 @@ def fetch_fd_overview(symbol_code: str = "AEX.AH/O") -> dict:
         "peildatum": None,
     }
 
-    subtitle_td = totals_tbl.find("tr").find("td")
-    if subtitle_td:
-        m = re.search(r"\((?:op\s)?(\d{2}-\d{2}-\d{4})\)", subtitle_td.get_text())
-        if m:
-            totalen["peildatum"] = datetime.strptime(m.group(1), "%d-%m-%Y").date()
+    # Probeer peildatum te extraheren uit eerste td
+    first_row = totals_tbl.find("tr")
+    if first_row:
+        subtitle_td = first_row.find("td")
+        if subtitle_td:
+            subtitle_text = subtitle_td.get_text()
+
+            # Zoek datum in formaat DD-MM-YYYY (flexibelere regex)
+            m = re.search(r"(\d{1,2}-\d{1,2}-\d{4})", subtitle_text)
+            if m:
+                date_str = m.group(1)
+                try:
+                    peildatum = datetime.strptime(date_str, "%d-%m-%Y").date()
+                except ValueError:
+                    print(f"Kon datum niet parsen: {date_str}")
+                    peildatum = None
+            else:
+                print(f"Geen datum gevonden in subtitle: {subtitle_text}")
+                peildatum = None
 
     trs = totals_tbl.find_all("tr")[1:]
     for tr in trs:
@@ -115,6 +129,9 @@ def fetch_fd_overview(symbol_code: str = "AEX.AH/O") -> dict:
                 totalen["totaal_oi_puts"] = _to_int(m.group(3))
         elif "call" in label and "put" in label:
             totalen["call_put_ratio"] = _to_float_nl(val)
+
+    # Voeg de peildatum toe aan totalen
+    totalen["peildatum"] = peildatum
 
     return {
         "ticker": "AD.AS" if symbol_code.upper().startswith("AEX.AH") else symbol_code,
