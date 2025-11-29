@@ -1,84 +1,22 @@
+version: '3.8'
+
 services:
-  api:
-    build: .
-    container_name: option-api
-    environment:
-      - TZ=Europe/Amsterdam
-      - DB_HOST=${DB_HOST:-192.168.1.200}
-      - DB_USER=${DB_USER:-remoteuser}
-      - DB_PASS=${DB_PASS:-T3l3foon32#123}
-      - DB_NAME=${DB_NAME:-optionsdb}
-      - DB_PORT=${DB_PORT:-3306}
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/status"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-
-  scraper:
-    build: .
-    container_name: option-scraper
-    command: ["python", "-m", "app.etl.beursduivel_scraper"]
-    environment:
-      - TZ=Europe/Amsterdam
-      - DB_HOST=${DB_HOST:-192.168.1.200}
-      - DB_USER=${DB_USER:-remoteuser}
-      - DB_PASS=${DB_PASS:-T3l3foon32#123}
-      - DB_NAME=${DB_NAME:-optionsdb}
-      - DB_PORT=${DB_PORT:-3306}
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  sentiment:
-    build: .
-    container_name: sentiment-tracker
-    command: >
-      sh -c "while true; do python -m app.etl.sentiment_tracker; sleep 86400; done"
-    environment:
-      - TZ=Europe/Amsterdam
-      - DB_HOST=${DB_HOST:-192.168.1.200}
-      - DB_USER=${DB_USER:-remoteuser}
-      - DB_PASS=${DB_PASS:-T3l3foon32#123}
-      - DB_NAME=${DB_NAME:-optionsdb}
-      - DB_PORT=${DB_PORT:-3306}
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   daily-etl:
-    build: .
+    image: python:3.12-slim
     container_name: daily-etl
-    command: >
-      sh -c "while true; do python -m app.etl.daily_etl; sleep 86400; done"
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - /volume1/docker/option-data-collector:/app
     environment:
       - TZ=Europe/Amsterdam
-      - DB_HOST=${DB_HOST:-192.168.1.200}
-      - DB_USER=${DB_USER:-remoteuser}
-      - DB_PASS=${DB_PASS:-T3l3foon32#123}
-      - DB_NAME=${DB_NAME:-optionsdb}
-      - DB_PORT=${DB_PORT:-3306}
+      - DB_HOST=192.168.1.201
+      - DB_USER=remoteuser
+      - DB_PASSWORD=T3l3foon32#123
+      - DB_NAME=optionsdb
+      - DB_PORT=3306
+      - PYTHONPATH=/app:/app/archive/original-files
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             python daily_pipeline.py"
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-# Note: If your DB is only reachable on the host network, you can enable host networking:
-#   network_mode: host
-# on each service and remove the ports section from api. Otherwise, the default bridge network works.

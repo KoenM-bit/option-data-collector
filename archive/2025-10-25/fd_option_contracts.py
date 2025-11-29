@@ -13,7 +13,7 @@ import mysql.connector
 
 # ---------- Database Config ----------
 DB_CONFIG = {
-    "host": "192.168.1.200",
+    "host": "192.168.1.201",
     "user": "remoteuser",
     "password": "T3l3foon32#123",
     "database": "optionsdb",
